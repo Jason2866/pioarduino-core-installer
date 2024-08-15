@@ -68,7 +68,7 @@ def rmtree(path):
             os.chmod(path, st_mode | stat.S_IWRITE)
         func(path)
 
-    return shutil.rmtree(path, onerror=_onerror)
+    return shutil.rmtree(path, onerror=_onerror)  # pylint: disable=deprecated-argument
 
 
 def find_file(name, path):
