@@ -29,8 +29,14 @@ from pioinstaller import __version__, exception, home, util
 
 log = logging.getLogger(__name__)
 
-PIO_CORE_DEVELOP_URL = "https://github.com/jason2866/platformio/archive/no_reg_depend.zip"
-PIO_CORE_RELEASE_URL = "https://github.com/Jason2866/platformio-core/archive/refs/tags/v6.1.16+free.zip"
+PIO_CORE_DEVELOP_URL = (
+    "https://github.com/Jason2866/platformio/"
+    "archive/no_reg_depend.zip"
+)
+PIO_CORE_RELEASE_URL = (
+    "https://github.com/Jason2866/platformio-core/"
+    "archive/refs/tags/v6.1.16+free.zip"
+)
 UPDATE_INTERVAL = 60 * 60 * 24 * 3  # 3 days
 
 
