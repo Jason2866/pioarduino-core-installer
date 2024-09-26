@@ -43,7 +43,7 @@ log = logging.getLogger(__name__)
 @click.pass_context
 def cli(
     ctx, verbose, shutdown_piohome, dev, ignore_python, pypi_index_url
-):  # pylint:disable=too-many-arguments
+):  # pylint: disable=too-many-arguments,too-many-positional-arguments
     if verbose:
         logging.getLogger("pioinstaller").setLevel(logging.DEBUG)
     if pypi_index_url:
