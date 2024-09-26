@@ -17,6 +17,7 @@
 import json
 import logging
 import os
+import requests
 import platform
 import subprocess
 import sys
@@ -29,13 +30,12 @@ from pioinstaller import __version__, exception, home, util
 
 log = logging.getLogger(__name__)
 
+PIO_CORE_URL = "https://api.github.com/repos/pioarduino/platformio-core/releases/latest"
+api_data = requests.get(PIO_CORE_URL).json()
+PIO_CORE_RELEASE_URL = api_data['zipball_url'][0]
 PIO_CORE_DEVELOP_URL = (
     "https://github.com/pioarduino/platformio-core/"
     "archive/pio_github.zip"
-)
-PIO_CORE_RELEASE_URL = (
-    "https://github.com/pioarduino/platformio-core/"
-    "archive/refs/tags/v6.1.16+test.zip"
 )
 UPDATE_INTERVAL = 60 * 60 * 24 * 3  # 3 days
 
