@@ -18,10 +18,10 @@ import json
 import logging
 import os
 import platform
-import requests
 import subprocess
 import sys
 import time
+import requests
 
 import click
 import semantic_version
