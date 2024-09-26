@@ -95,8 +95,8 @@ def fetch_portable_python(dst):
 def get_portable_python_url():
     systype = util.get_systype()
     result = requests.get(
-        "https://github.com/pioarduino/python-portable/"
-        "releases/download/v3.11.7/python-portable.json",
+        "https://api.registry.platformio.org/v3/packages/"
+        "platformio/tool/python-portable",
         timeout=10,
     ).json()
     versions = [
