@@ -62,7 +62,7 @@ def create_core_penv(penv_dir=None, ignore_pythons=None):
     if not result_dir:
         raise exception.PIOInstallerException(
             "Could not create PIO Core Virtual Environment. Please report to "
-            "https://github.com/platformio/platformio-core-installer/issues"
+            "https://github.com/pioarduino/pioarduino-core-installer/issues"
         )
 
     python_exe = os.path.join(
