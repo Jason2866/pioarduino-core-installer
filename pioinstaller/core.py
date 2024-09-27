@@ -21,7 +21,7 @@ import platform
 import subprocess
 import sys
 import time
-# import requests
+import requests
 
 import click
 import semantic_version
@@ -30,13 +30,12 @@ from pioinstaller import __version__, exception, home, util
 
 log = logging.getLogger(__name__)
 
-# PIO_CORE_URL = "https://api.github.com/repos/pioarduino/platformio-core/releases/latest"
-# api_data = requests.get(PIO_CORE_URL, timeout=10).json()
-PIO_CORE_RELEASE_URL = (
+PIO_CORE_API_URL = (
     "https://api.github.com/repos/pioarduino/"
-    "platformio-core/zipball/v6.1.16"
+    "platformio-core/releases/latest"
 )
-# PIO_CORE_RELEASE_URL = api_data['zipball_url'][0]
+api_data = requests.get(PIO_CORE_API_URL, timeout=10).json()
+PIO_CORE_RELEASE_URL = api_data['zipball_url']
 PIO_CORE_DEVELOP_URL = (
     "https://github.com/pioarduino/platformio-core/"
     "archive/pio_github.zip"

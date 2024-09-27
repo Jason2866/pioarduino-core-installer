@@ -2,6 +2,7 @@
 __pycache__/
 *.py[cod]
 *$py.class
+.venv/
 
 # App specific
 *.egg-info/
@@ -11,3 +12,4 @@ build/
 
 # Misc
 .idea
+.DS_Store
