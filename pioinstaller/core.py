@@ -35,12 +35,19 @@ PIO_CORE_API_URL = (
     "platformio-core/releases/latest"
 )
 api_data = requests.get(PIO_CORE_API_URL, timeout=10).json()
-PIO_CORE_RELEASE_URL = api_data['zipball_url']
+try:
+    data = api_data["zipball_url"]
+except KeyError:
+    data = "https://github.com/pioarduino/platformio-core/archive/refs/tags/v6.1.16.zip"
+    print(
+        "Could not download actual pioarduino core. Try to install v6.1.16 instead."
+    )
+PIO_CORE_RELEASE_URL = data
 PIO_CORE_DEVELOP_URL = (
     "https://github.com/pioarduino/platformio-core/"
     "archive/pio_github.zip"
 )
-UPDATE_INTERVAL = 60 * 60 * 24 * 3  # 3 days
+UPDATE_INTERVAL = 60 * 60 * 24 * 31  # 31 days
 
 
 def get_core_dir(force_to_root=False):

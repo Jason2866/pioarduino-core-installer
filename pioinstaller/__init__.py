@@ -17,17 +17,17 @@ import logging.config
 VERSION = (1, 2, 3)
 __version__ = ".".join([str(s) for s in VERSION])
 
-__title__ = "platformio-installer"
-__description__ = "An installer for PlatformIO Core"
+__title__ = "pioarduino-installer"
+__description__ = "An installer for PlatformIO pioarduino Core"
 
-__url__ = "https://platformio.org"
+__url__ = "https://pioarduino.org"
 
-__author__ = "PlatformIO Labs"
+__author__ = "PlatformIO Labs and pioarduino"
 __email__ = "contact@piolabs.com"
 
 
 __license__ = "Apache-2.0"
-__copyright__ = "Copyright 2014-present PlatformIO"
+__copyright__ = "Copyright 2014-present PlatformIO and pioarduino"
 
 
 logging.basicConfig(format="%(levelname)s: %(message)s")
