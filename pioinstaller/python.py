@@ -239,7 +239,7 @@ def find_compatible_pythons(
         if missed_venv_module:
             # pylint:disable=line-too-long
             raise click.ClickException(
-                """Can not install PlatformIO Core due to a missed `venv` module in your Python installation.
+                """Can not install pioarduino Core due to a missed `venv` module in your Python installation.
 Please install this package manually using the OS package manager. For example:
 
 $ apt-get install python3.%d-venv
@@ -250,8 +250,7 @@ $ apt-get install python3.%d-venv
 
         raise exception.IncompatiblePythonError(
             "Could not find compatible Python 3.7 or above in your system."
-            "Please install the latest official Python 3 and restart installation:\n"
-            "https://docs.platformio.org/page/faq.html#install-python-interpreter"
+            "Please install the latest official Python 3 and restart installation."
         )
 
     return result
