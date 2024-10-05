@@ -121,10 +121,10 @@ def _install_platformio_core(shutdown_piohome=True, develop=False, ignore_python
     )
     command = [python_exe, "-m", "pip", "install", "-U"]
     if develop:
-        click.echo("Installing a development version of PlatformIO Core")
+        click.echo("Installing a development version of pioarduino Core")
         command.append(PIO_CORE_DEVELOP_URL)
     else:
-        click.echo("Installing PlatformIO Core")
+        click.echo("Installing pioarduino Core")
         command.append(PIO_CORE_RELEASE_URL)
     try:
         subprocess.check_call(command)
@@ -136,7 +136,7 @@ def _install_platformio_core(shutdown_piohome=True, develop=False, ignore_python
                 " try to disable it for a while.\n %s" % error
             )
         raise exception.PIOInstallerException(
-            "Could not install PlatformIO Core: %s" % error
+            "Could not install pioarduino Core: %s" % error
         )
     platformio_exe = os.path.join(
         penv.get_penv_bin_dir(penv_dir),
@@ -144,7 +144,7 @@ def _install_platformio_core(shutdown_piohome=True, develop=False, ignore_python
     )
 
     click.secho(
-        "\nPlatformIO Core has been successfully installed into an isolated environment `%s`!\n"
+        "\npioarduino Core has been successfully installed into an isolated environment `%s`!\n"
         % penv_dir,
         fg="green",
     )
@@ -153,9 +153,7 @@ def _install_platformio_core(shutdown_piohome=True, develop=False, ignore_python
     click.secho(
         """
 If you need an access to `platformio.exe` from other applications, please install Shell Commands
-(add PlatformIO Core binary directory `%s` to the system environment PATH variable):
-
-See https://docs.platformio.org/page/installation.html#install-shell-commands
+(add pioarduino Core binary directory `%s` to the system environment PATH variable).
 """
         % penv.get_penv_bin_dir(penv_dir),
         fg="cyan",
@@ -183,7 +181,7 @@ def check(develop=False, global_=False, auto_upgrade=False, version_spec=None):
     )
     if not os.path.isfile(platformio_exe):
         raise exception.InvalidPlatformIOCore(
-            "PlatformIO executable not found in `%s`" % penv.get_penv_bin_dir()
+            "pioarduino executable not found in `%s`" % penv.get_penv_bin_dir()
         )
     try:
         subprocess.check_output([platformio_exe, "--help"], stderr=subprocess.STDOUT)
@@ -199,7 +197,7 @@ def check(develop=False, global_=False, auto_upgrade=False, version_spec=None):
     except subprocess.CalledProcessError as e:
         error = e.output.decode()
         raise exception.InvalidPlatformIOCore(
-            "Could not import PlatformIO module. Error: %s" % error
+            "Could not import pioarduino module. Error: %s" % error
         )
     piocore_version = convert_version(result.get("core_version"))
     develop = develop or bool(piocore_version.prerelease if piocore_version else False)
@@ -230,7 +228,7 @@ def check(develop=False, global_=False, auto_upgrade=False, version_spec=None):
         try:
             result.update(fetch_python_state(python_exe))
         except:  # pylint:disable=bare-except
-            raise exception.InvalidPlatformIOCore("Could not import PlatformIO module")
+            raise exception.InvalidPlatformIOCore("Could not import pioarduino module")
 
     return result
 
@@ -239,7 +237,7 @@ def _check_core_version(piocore_version, version_spec):
     try:
         if piocore_version not in semantic_version.Spec(version_spec):
             raise exception.InvalidPlatformIOCore(
-                "PlatformIO Core version %s does not match version requirements %s."
+                "pioarduino Core version %s does not match version requirements %s."
                 % (str(piocore_version), version_spec)
             )
     except ValueError:
@@ -264,7 +262,7 @@ def _check_platform_version():
     ):
         return True
     raise exception.InvalidPlatformIOCore(
-        "PlatformIO Core was installed using another platform `%s`. "
+        "pioarduino Core was installed using another platform `%s`. "
         "Your current platform: %s"
         % (platform_state.get("platform"), platform.platform(terse=True))
     )
@@ -337,7 +335,7 @@ def auto_upgrade_core(platformio_exe, develop=False):
         return True
     except Exception as e:  # pylint:disable=broad-except
         raise exception.PIOInstallerException(
-            "Could not upgrade PlatformIO Core: %s" % str(e)
+            "Could not upgrade pioarduino Core: %s" % str(e)
         )
     return False
 
