@@ -95,8 +95,8 @@ def fetch_portable_python(dst):
 def get_portable_python_url():
     systype = util.get_systype()
     result = requests.get(
-        "https://api.registry.platformio.org/v3/packages/"
-        "platformio/tool/python-portable",
+        "https://github.com/pioarduino/python-portable/"
+        "releases/download/v3.11.7/python-portable.json",
         timeout=10,
     ).json()
     versions = [
@@ -129,7 +129,7 @@ def check():
     if sys.version_info < (3, 6):
         raise exception.IncompatiblePythonError(
             "Unsupported Python version: %s. "
-            "Minimum supported Python version is 3.6 or above."
+            "Minimum supported Python version is 3.7 or above."
             % platform.python_version(),
         )
 
@@ -239,7 +239,7 @@ def find_compatible_pythons(
         if missed_venv_module:
             # pylint:disable=line-too-long
             raise click.ClickException(
-                """Can not install PlatformIO Core due to a missed `venv` module in your Python installation.
+                """Can not install pioarduino Core due to a missed `venv` module in your Python installation.
 Please install this package manually using the OS package manager. For example:
 
 $ apt-get install python3.%d-venv
@@ -249,9 +249,8 @@ $ apt-get install python3.%d-venv
             )
 
         raise exception.IncompatiblePythonError(
-            "Could not find compatible Python 3.6 or above in your system."
-            "Please install the latest official Python 3 and restart installation:\n"
-            "https://docs.platformio.org/page/faq.html#install-python-interpreter"
+            "Could not find compatible Python 3.7 or above in your system."
+            "Please install the latest official Python 3 and restart installation."
         )
 
     return result

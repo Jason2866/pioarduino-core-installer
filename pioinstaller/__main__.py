@@ -43,7 +43,7 @@ log = logging.getLogger(__name__)
 @click.pass_context
 def cli(
     ctx, verbose, shutdown_piohome, dev, ignore_python, pypi_index_url
-):  # pylint:disable=too-many-arguments
+):  # pylint: disable=too-many-arguments,too-many-positional-arguments
     if verbose:
         logging.getLogger("pioinstaller").setLevel(logging.DEBUG)
     if pypi_index_url:
@@ -119,13 +119,13 @@ def core_check(ctx, **kwargs):
         if kwargs.get("dump_state"):
             core.dump_state(target=str(kwargs.get("dump_state")), state=state)
         click.secho(
-            "Found compatible PlatformIO Core %s -> %s"
+            "Found compatible pioarduino Core %s -> %s"
             % (state.get("core_version"), state.get("platformio_exe")),
             fg="green",
         )
     except exception.InvalidPlatformIOCore as e:
         raise click.ClickException(
-            "Compatible PlatformIO Core not found.\nReason: %s" % str(e)
+            "Compatible pioarduino Core not found.\nReason: %s" % str(e)
         )
 
 
