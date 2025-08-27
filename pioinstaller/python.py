@@ -212,7 +212,7 @@ def find_compatible_pythons(
         # If portable Python download failed, raise the original error
         raise exception.IncompatiblePythonError(
             "Could not find compatible Python 3.10 or above in your system. "
-            "Attempted to download portable Python but failed. "
+            "Attempted to download portable Python failed. "
             "Please install the latest official Python 3 and restart installation."
         )
 
