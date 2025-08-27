@@ -21,7 +21,6 @@ import subprocess
 import sys
 import tempfile
 
-import click
 import requests
 import semantic_version
 
@@ -137,11 +136,6 @@ def check():
     if is_conda():
         raise exception.IncompatiblePythonError("Conda is not supported")
 
-    try:
-        __import__("venv")
-    except ImportError:
-        raise exception.PythonVenvModuleNotFound()
-
     # portable Python 3 for macOS is not compatible with macOS < 10.13
     # https://github.com/platformio/platformio-core-installer/issues/70
     if util.IS_MACOS:
@@ -159,12 +153,10 @@ def check():
         )
 
     try:
-        assert os.path.isdir(os.path.join(sys.prefix, "Scripts")) or (
-            sys.version_info >= (3, 5) and __import__("venv")
-        )
-    except (AssertionError, ImportError):
+        assert os.path.isdir(os.path.join(sys.prefix, "Scripts"))
+    except AssertionError:
         raise exception.IncompatiblePythonError(
-            "Unsupported python without 'Scripts' folder and 'venv' module"
+            "Unsupported python without 'Scripts' folder"
         )
 
     return True
@@ -200,7 +192,6 @@ def find_compatible_pythons(
     candidates.insert(0, sys.executable)
 
     result = []
-    missed_venv_module = False
     for item in candidates:
         if item in ignore_list:
             continue
@@ -224,8 +215,6 @@ def find_compatible_pythons(
         except subprocess.CalledProcessError as e:
             try:
                 error = e.output.decode()
-                if error and "`venv` module" in error:
-                    missed_venv_module = True
                 log.debug(error)
             except UnicodeDecodeError:
                 pass
@@ -233,18 +222,6 @@ def find_compatible_pythons(
             log.debug(e)
 
     if not result and raise_exception:
-        if missed_venv_module:
-            # pylint:disable=line-too-long
-            raise click.ClickException(
-                """Can not install pioarduino Core due to a missed `venv` module in your Python installation.
-Please install this package manually using the OS package manager. For example:
-
-$ apt-get install python3.%d-venv
-
-(MAY require administrator access `sudo`)"""
-                % (sys.version_info[1]),
-            )
-
         raise exception.IncompatiblePythonError(
             "Could not find compatible Python 3.10 or above in your system."
             "Please install the latest official Python 3 and restart installation."
