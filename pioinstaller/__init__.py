@@ -14,8 +14,7 @@
 
 import logging.config
 
-VERSION = (1, 2, 3)
-__version__ = ".".join([str(s) for s in VERSION])
+__version__ = "1.2.3"
 
 __title__ = "pioarduino-installer"
 __description__ = "An installer for PlatformIO pioarduino Core"
