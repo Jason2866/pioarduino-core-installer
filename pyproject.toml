@@ -77,3 +77,9 @@ line_length = 88
 testpaths = ["tests"]
 python_files = ["test_*.py"]
 addopts = "--verbose --capture=no"
+
+[dependency-groups]
+dev = [
+    "black>=25.1.0",
+    "pylint>=3.3.8",
+]

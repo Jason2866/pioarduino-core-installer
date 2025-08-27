@@ -171,7 +171,7 @@ def find_compatible_pythons(
     exenames = [
         "python3",  # system Python
         "python3.13",
-        "python3.12", 
+        "python3.12",
         "python3.11",
         "python3.10",
         "python",

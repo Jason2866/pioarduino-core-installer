@@ -90,7 +90,7 @@ def python():
             % (platform.python_version(), util.get_pythonexe_path()),
             fg="green",
         )
-    except (exception.IncompatiblePythonError, exception.PythonVenvModuleNotFound) as e:
+    except exception.IncompatiblePythonError as e:
         raise click.ClickException(
             "The Python %s (%s) interpreter is not compatible.\nReason: %s"
             % (platform.python_version(), util.get_pythonexe_path(), str(e))

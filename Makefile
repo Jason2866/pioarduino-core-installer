@@ -1,6 +1,7 @@
-# Instal# Use uv for all operations
+# Use uv for all operations
+
 lint:
-	pylint --rcfile=./.pylintrc ./pioinstaller
+	uv run pylint --rcfile=./.pylintrc ./pioinstaller
 
 isort:
 	uv run isort ./tests
@@ -17,55 +18,15 @@ install-dev:
 	uv sync --dev
 
 pack:
-	pioinstaller pack
+	uv run pioinstaller pack
 
-before-commit: isort format lint testndencies with uv
-install-dev:
-	uv pip install -e ".[dev]"
-
-# Alternative install with pip (for compatibility)
-install-dev-pip:
-	pip install -e ".[dev]"
-
-lint:
-	pylint --rcfile=./.pylintrc ./pioinstaller
-
-isort:
-	isort ./tests
-	isort ./pioinstaller
-
-format:
-	black ./pioinstaller
-	black ./tests
-
-test:
-	pytest --verbose --capture=no --exitfirst tests
-
-pack:
-	pioinstaller pack
-
-before-commit: isort format lint
+before-commit: isort format lint test
 
 clean:
 	find . -name \*.pyc -delete
 	find . -name __pycache__ -delete
 	rm -rf .cache
-	rm -rf build/
-	rm -rf dist/
-	rm -rf *.egg-info/
 
-# Build with uv
-build:
-	uv build
-
-# Build with traditional tools (for compatibility) 
-build-fallback:
-	python -m build
-
-# Publish with uv
 publish:
+	uv build
 	uv publish
-
-# Publish with traditional tools (for compatibility)
-publish-fallback:
-	python -m twine upload dist/*

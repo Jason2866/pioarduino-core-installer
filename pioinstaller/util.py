@@ -73,8 +73,6 @@ def rmtree(path):
             if exc[1].errno == 13:  # Permission denied
                 os.chmod(path, stat.S_IWRITE)
                 func(path)
-            else:
-                raise
 
         return shutil.rmtree(path, onerror=handle_remove_readonly)
 

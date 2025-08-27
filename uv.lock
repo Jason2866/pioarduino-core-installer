@@ -254,6 +254,12 @@ dev = [
     { name = "uv" },
 ]
 
+[package.dev-dependencies]
+dev = [
+    { name = "black" },
+    { name = "pylint" },
+]
+
 [package.metadata]
 requires-dist = [
     { name = "black", marker = "extra == 'dev'" },
@@ -270,6 +276,12 @@ requires-dist = [
     { name = "wheel", specifier = ">=0.43.0" },
 ]
 provides-extras = ["dev"]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "black", specifier = ">=25.1.0" },
+    { name = "pylint", specifier = ">=3.3.8" },
+]
 
 [[package]]
 name = "platformdirs"
