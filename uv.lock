@@ -264,7 +264,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "black", marker = "extra == 'dev'" },
-    { name = "certifi", specifier = ">=2024.0.0" },
+    { name = "certifi", specifier = ">=2025.8.3" },
     { name = "click", specifier = ">=8.1.0" },
     { name = "colorama", specifier = ">=0.4.6" },
     { name = "isort", marker = "extra == 'dev'" },
