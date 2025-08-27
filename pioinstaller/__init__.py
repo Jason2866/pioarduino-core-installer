@@ -14,12 +14,12 @@
 
 import logging.config
 
-__version__ = "1.2.3"
+__version__ = "1.3.0"
 
 __title__ = "pioarduino-installer"
 __description__ = "An installer for PlatformIO pioarduino Core"
 
-__url__ = "https://pioarduino.org"
+__url__ = "https://github.com/pioarduino"
 
 __author__ = "PlatformIO Labs and pioarduino"
 __email__ = "contact@piolabs.com"
