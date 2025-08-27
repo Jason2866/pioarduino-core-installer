@@ -138,9 +138,7 @@ def check():
         raise exception.IncompatiblePythonError("Conda is not supported")
 
     try:
-        __import__("ensurepip")
         __import__("venv")
-        # __import__("distutils.command")
     except ImportError:
         raise exception.PythonVenvModuleNotFound()
 
