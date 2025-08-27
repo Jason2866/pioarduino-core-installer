@@ -47,11 +47,9 @@ def get_pythonexe_path():
 
 def expanduser(path):
     """
-    Be compatible with Python 3.8, on Windows skip HOME and check for USERPROFILE
+    Expand user home directory path.
     """
-    if not IS_WINDOWS or not path.startswith("~") or "USERPROFILE" not in os.environ:
-        return os.path.expanduser(path)
-    return os.environ["USERPROFILE"] + path[1:]
+    return os.path.expanduser(path)
 
 
 def has_non_ascii_char(text):

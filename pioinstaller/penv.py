@@ -16,7 +16,9 @@ import json
 import logging
 import os
 import platform
+import shutil
 import subprocess
+import tarfile
 import time
 
 import click
@@ -73,7 +75,6 @@ def download_and_install_uv(cache_dir):
         util.download_file(uv_url, uv_archive_path)
         
         # Extract uv binary
-        import tarfile
         with tarfile.open(uv_archive_path, 'r:gz') as tar:
             # Extract all files to a temporary directory
             extract_dir = os.path.join(cache_dir, "tmp", "uv-extract")
@@ -96,7 +97,6 @@ def download_and_install_uv(cache_dir):
             
             # Copy uv to cache directory
             uv_dest = os.path.join(cache_dir, "uv" + (".exe" if util.IS_WINDOWS else ""))
-            import shutil
             shutil.copy2(uv_binary, uv_dest)
             
             # Make executable on Unix systems
