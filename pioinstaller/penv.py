@@ -26,8 +26,6 @@ from pioinstaller import __version__, core, exception, python, util
 log = logging.getLogger(__name__)
 
 
-VIRTUALENV_URL = "https://bootstrap.pypa.io/virtualenv/virtualenv.pyz"
-PIP_URL = "https://bootstrap.pypa.io/get-pip.py"
 UV_URL = "https://github.com/astral-sh/uv/releases/latest/download/uv-{platform}.tar.gz"
 
 
@@ -161,8 +159,9 @@ def create_core_penv(penv_dir=None, ignore_pythons=None):
     # Get uv executable
     uv_exe = get_uv_executable()
     if not uv_exe:
-        click.echo("Could not install uv, falling back to traditional venv + pip method")
-        return create_core_penv_fallback(penv_dir, ignore_pythons)
+        raise exception.PIOInstallerException(
+            "uv package manager is required but not available. Please install uv first."
+        )
 
     result_dir = None
     for python_exe in python.find_compatible_pythons(ignore_pythons):
@@ -176,8 +175,10 @@ def create_core_penv(penv_dir=None, ignore_pythons=None):
             result_dir = create_venv_with_uv(uv_exe, python_exe, penv_dir)
 
     if not result_dir:
-        click.echo("Could not create virtual environment with uv, falling back to traditional method")
-        return create_core_penv_fallback(penv_dir, ignore_pythons)
+        raise exception.PIOInstallerException(
+            "Could not create PIO Core Virtual Environment. Please report to "
+            "https://github.com/pioarduino/pioarduino-core-installer/issues"
+        )
 
     python_exe = os.path.join(
         get_penv_bin_dir(penv_dir), "python.exe" if util.IS_WINDOWS else "python"
@@ -217,94 +218,6 @@ def create_venv_with_uv(uv_exe, python_exe, penv_dir):
     except Exception as e:
         log.debug("Error creating venv with uv: %s", str(e))
         return None
-
-
-def create_core_penv_fallback(penv_dir=None, ignore_pythons=None):
-    """Fallback method using traditional venv + pip."""
-    penv_dir = penv_dir or get_penv_dir()
-
-    result_dir = None
-    for python_exe in python.find_compatible_pythons(ignore_pythons):
-        result_dir = create_virtualenv(python_exe, penv_dir)
-        if result_dir:
-            break
-
-    if not result_dir and not python.is_portable():
-        python_exe = python.fetch_portable_python(os.path.dirname(penv_dir))
-        if python_exe:
-            result_dir = create_virtualenv(python_exe, penv_dir)
-
-    if not result_dir:
-        raise exception.PIOInstallerException(
-            "Could not create PIO Core Virtual Environment. Please report to "
-            "https://github.com/pioarduino/pioarduino-core-installer/issues"
-        )
-
-    python_exe = os.path.join(
-        get_penv_bin_dir(penv_dir), "python.exe" if util.IS_WINDOWS else "python"
-    )
-    init_state(python_exe, penv_dir)
-    update_pip(python_exe, penv_dir)
-    click.echo("Virtual environment has been successfully created!")
-    return result_dir
-
-
-def create_virtualenv(python_exe, penv_dir):
-    log.debug("Using %s Python for virtual environment.", python_exe)
-    try:
-        return create_with_local_venv(python_exe, penv_dir)
-    except Exception as e:  # pylint:disable=broad-except
-        log.debug(
-            "Could not create virtualenv with local packages"
-            " Trying download virtualenv script and using it. Error: %s",
-            str(e),
-        )
-        try:
-            return create_with_remote_venv(python_exe, penv_dir)
-        except Exception as exc:  # pylint:disable=broad-except
-            log.debug(
-                "Could not create virtualenv with downloaded script. Error: %s",
-                str(exc),
-            )
-    return None
-
-
-def create_with_local_venv(python_exe, penv_dir):
-    venv_cmd_options = [
-        [python_exe, "-m", "venv", penv_dir],
-        [python_exe, "-m", "virtualenv", "-p", python_exe, penv_dir],
-        ["virtualenv", "-p", python_exe, penv_dir],
-        [python_exe, "-m", "virtualenv", penv_dir],
-        ["virtualenv", penv_dir],
-    ]
-    last_error = None
-    for command in venv_cmd_options:
-        util.safe_remove_dir(penv_dir)
-        log.debug("Creating virtual environment: %s", " ".join(command))
-        try:
-            subprocess.run(command, check=True)
-            return penv_dir
-        except Exception as e:  # pylint:disable=broad-except
-            last_error = e
-    raise last_error  # pylint:disable=raising-bad-type
-
-
-def create_with_remote_venv(python_exe, penv_dir):
-    util.safe_remove_dir(penv_dir)
-
-    log.debug("Downloading virtualenv package archive")
-    venv_script_path = util.download_file(
-        VIRTUALENV_URL,
-        os.path.join(
-            os.path.dirname(penv_dir), ".cache", "tmp", os.path.basename(VIRTUALENV_URL)
-        ),
-    )
-    if not venv_script_path:
-        raise exception.PIOInstallerException("Could not find virtualenv script")
-    command = [python_exe, venv_script_path, penv_dir]
-    log.debug("Creating virtual environment: %s", " ".join(command))
-    subprocess.run(command, check=True)
-    return penv_dir
 
 
 def init_state(python_exe, penv_dir):
@@ -351,38 +264,3 @@ def save_state(state, penv_dir=None):
     with open(state_path, "w") as fp:
         json.dump(state, fp)
     return state_path
-
-
-def update_pip(python_exe, penv_dir):
-    click.echo("Updating Python package manager (PIP) in the virtual environment")
-    try:
-        log.debug("Creating pip.conf file in %s", penv_dir)
-        with open(os.path.join(penv_dir, "pip.conf"), "w") as fp:
-            fp.write("\n".join(["[global]", "user=no"]))
-
-        try:
-            log.debug("Updating PIP ...")
-            subprocess.run(
-                [python_exe, "-m", "pip", "install", "-U", "pip"], check=True
-            )
-        except subprocess.CalledProcessError as e:
-            log.debug(
-                "Could not update PIP. Error: %s",
-                str(e),
-            )
-            log.debug("Downloading 'get-pip.py' installer...")
-            get_pip_path = os.path.join(
-                os.path.dirname(penv_dir), ".cache", "tmp", os.path.basename(PIP_URL)
-            )
-            util.download_file(PIP_URL, get_pip_path)
-            log.debug("Installing PIP ...")
-            subprocess.run([python_exe, get_pip_path], check=True)
-
-        click.echo("PIP has been successfully updated!")
-        return True
-    except Exception as e:  # pylint:disable=broad-except
-        log.debug(
-            "Could not install PIP. Error: %s",
-            str(e),
-        )
-        return False

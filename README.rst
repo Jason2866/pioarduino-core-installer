@@ -8,8 +8,7 @@ A standalone installer for `pioarduino Core` using modern Python packaging tools
 Features
 --------
 
-* Fast installation using `uv` package manager
-* Automatic fallback to `pip` if `uv` is not available
+* Fast installation using `uv` package manager (required)
 * Isolated virtual environment creation
 * Cross-platform compatibility (Windows, macOS, Linux)
 * Python 3.10+ support
@@ -18,12 +17,15 @@ Requirements
 ------------
 
 * Python 3.10 or newer
+* `uv` package manager (automatically downloaded if not available)
 * Internet connection for downloading packages
 
 Development
 -----------
 
 This project uses modern Python packaging with `pyproject.toml` and `uv`.
+
+**Note:** If `uv` is not installed on your system, the installer will automatically download and install it for you.
 
 Quick start for development::
 
@@ -46,9 +48,3 @@ Quick start for development::
     
     # Run linter
     uv run pylint pioinstaller
-
-Alternative development setup with traditional tools::
-
-    pip install -e ".[dev]"
-    make install-dev
-    make test

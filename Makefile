@@ -1,40 +1,20 @@
-# Instal# Use uv for faster operations when available
-UV := $(shell command -v uv 2> /dev/null)
-
+# Instal# Use uv for all operations
 lint:
 	pylint --rcfile=./.pylintrc ./pioinstaller
 
 isort:
-ifdef UV
 	uv run isort ./tests
 	uv run isort ./pioinstaller
-else
-	isort ./tests
-	isort ./pioinstaller
-endif
 
 format:
-ifdef UV
 	uv run black ./pioinstaller
 	uv run black ./tests
-else
-	black ./pioinstaller
-	black ./tests
-endif
 
 test:
-ifdef UV
 	uv run pytest --verbose --capture=no --exitfirst tests
-else
-	py.test --verbose --capture=no --exitfirst tests
-endif
 
 install-dev:
-ifdef UV
 	uv sync --dev
-else
-	pip install -e ".[dev]"
-endif
 
 pack:
 	pioinstaller pack

@@ -117,74 +117,37 @@ def _install_platformio_core(shutdown_piohome=True, develop=False, ignore_python
 
     penv_dir = penv.create_core_penv(ignore_pythons=ignore_pythons)
     
-    # Try to use uv first, fall back to pip if needed
+    # Use uv for installation
     uv_exe = penv.get_uv_executable()
+    if not uv_exe:
+        raise exception.PIOInstallerException(
+            "uv package manager is required but not available. Please install uv first."
+        )
     
-    if uv_exe:
-        success = _install_with_uv(uv_exe, penv_dir, develop)
-        if success:
-            _post_install_message(penv_dir)
-            return True
-        else:
-            click.echo("uv installation failed, falling back to pip...")
-    
-    # Fallback to pip installation
-    success = _install_with_pip(penv_dir, develop)
-    if success:
-        _post_install_message(penv_dir)
-        return True
-    
-    raise exception.PIOInstallerException("Could not install pioarduino Core with either uv or pip")
+    _install_with_uv(uv_exe, penv_dir, develop)
+    _post_install_message(penv_dir)
+    return True
 
 
 def _install_with_uv(uv_exe, penv_dir, develop):
     """Install platformio core using uv."""
     from pioinstaller import penv
     
-    try:
-        if develop:
-            click.echo("Installing a development version of pioarduino Core using uv")
-            command = [uv_exe, "pip", "install", "--python", 
-                      os.path.join(penv.get_penv_bin_dir(penv_dir), "python.exe" if util.IS_WINDOWS else "python"),
-                      PIO_CORE_DEVELOP_URL]
-        else:
-            click.echo("Installing pioarduino Core using uv")
-            command = [uv_exe, "pip", "install", "--python",
-                      os.path.join(penv.get_penv_bin_dir(penv_dir), "python.exe" if util.IS_WINDOWS else "python"),
-                      PIO_CORE_RELEASE_URL]
-        
-        log.debug("Running: %s", " ".join(command))
-        subprocess.check_call(command)
-        return True
-        
-    except subprocess.CalledProcessError as e:
-        log.debug("uv installation failed: %s", str(e))
-        return False
-    except Exception as e:
-        log.debug("uv installation error: %s", str(e))
-        return False
-
-
-def _install_with_pip(penv_dir, develop):
-    """Install platformio core using pip (fallback method)."""
-    from pioinstaller import penv
+    if develop:
+        click.echo("Installing a development version of pioarduino Core using uv")
+        command = [uv_exe, "pip", "install", "--python", 
+                  os.path.join(penv.get_penv_bin_dir(penv_dir), "python.exe" if util.IS_WINDOWS else "python"),
+                  PIO_CORE_DEVELOP_URL]
+    else:
+        click.echo("Installing pioarduino Core using uv")
+        command = [uv_exe, "pip", "install", "--python",
+                  os.path.join(penv.get_penv_bin_dir(penv_dir), "python.exe" if util.IS_WINDOWS else "python"),
+                  PIO_CORE_RELEASE_URL]
     
+    log.debug("Running: %s", " ".join(command))
     try:
-        python_exe = os.path.join(
-            penv.get_penv_bin_dir(penv_dir), "python.exe" if util.IS_WINDOWS else "python"
-        )
-        command = [python_exe, "-m", "pip", "install", "-U"]
-        if develop:
-            click.echo("Installing a development version of pioarduino Core using pip")
-            command.append(PIO_CORE_DEVELOP_URL)
-        else:
-            click.echo("Installing pioarduino Core using pip") 
-            command.append(PIO_CORE_RELEASE_URL)
-        
         subprocess.check_call(command)
-        return True
-        
-    except Exception as e:
+    except subprocess.CalledProcessError as e:
         error = str(e)
         if util.IS_WINDOWS:
             error = (
@@ -192,7 +155,7 @@ def _install_with_pip(penv_dir, develop):
                 " try to disable it for a while.\n %s" % error
             )
         raise exception.PIOInstallerException(
-            "Could not install pioarduino Core: %s" % error
+            "Could not install pioarduino Core with uv: %s" % error
         )
 
 
