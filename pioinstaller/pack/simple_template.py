@@ -1,10 +1,8 @@
 #!/usr/bin/env python3
 # Simple PlatformIO Core installer that uses uv
 
-import os
 import subprocess
 import sys
-import tempfile
 
 
 def main():
@@ -20,26 +18,24 @@ def main():
         print("  curl -LsSf https://astral.sh/uv/install.sh | sh")
         sys.exit(1)
 
-    # Create a temporary directory for the installation
-    with tempfile.TemporaryDirectory() as tmp_dir:
-        # Install pioinstaller using uv
-        try:
-            subprocess.check_call(
-                [
-                    "uv",
-                    "pip",
-                    "install",
-                    "--quiet",
-                    "git+https://github.com/Jason2866/pioarduino-core-installer@uv_refactor",
-                ]
-            )
+    # Install pioinstaller using uv
+    try:
+        subprocess.check_call(
+            [
+                "uv",
+                "pip",
+                "install",
+                "--quiet",
+                "git+https://github.com/Jason2866/pioarduino-core-installer@uv_refactor",
+            ]
+        )
 
-            # Run pioinstaller
-            subprocess.check_call(["uv", "run", "pioinstaller"] + sys.argv[1:])
+        # Run pioinstaller
+        subprocess.check_call(["uv", "run", "pioinstaller"] + sys.argv[1:])
 
-        except subprocess.CalledProcessError as e:
-            print(f"Error installing or running pioinstaller: {e}")
-            sys.exit(1)
+    except subprocess.CalledProcessError as e:
+        print(f"Error installing or running pioinstaller: {e}")
+        sys.exit(1)
 
 
 if __name__ == "__main__":
