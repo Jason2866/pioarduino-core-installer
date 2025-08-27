@@ -258,6 +258,7 @@ dev = [
 dev = [
     { name = "black" },
     { name = "pylint" },
+    { name = "pytest" },
 ]
 
 [package.metadata]
@@ -281,6 +282,7 @@ provides-extras = ["dev"]
 dev = [
     { name = "black", specifier = ">=25.1.0" },
     { name = "pylint", specifier = ">=3.3.8" },
+    { name = "pytest", specifier = ">=8.4.1" },
 ]
 
 [[package]]
