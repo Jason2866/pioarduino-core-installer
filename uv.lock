@@ -245,7 +245,7 @@ dependencies = [
     { name = "wheel" },
 ]
 
-[package.optional-dependencies]
+[package.dev-dependencies]
 dev = [
     { name = "black" },
     { name = "isort" },
@@ -254,35 +254,24 @@ dev = [
     { name = "uv" },
 ]
 
-[package.dev-dependencies]
-dev = [
-    { name = "black" },
-    { name = "pylint" },
-    { name = "pytest" },
-]
-
 [package.metadata]
 requires-dist = [
-    { name = "black", marker = "extra == 'dev'" },
     { name = "certifi", specifier = ">=2025.8.3" },
     { name = "click", specifier = ">=8.1.0" },
     { name = "colorama", specifier = ">=0.4.6" },
-    { name = "isort", marker = "extra == 'dev'" },
-    { name = "pylint", marker = "extra == 'dev'" },
-    { name = "pytest", marker = "extra == 'dev'" },
     { name = "requests", specifier = ">=2.32.0" },
     { name = "semantic-version", specifier = ">=2.10.0" },
     { name = "urllib3", specifier = ">=2.0" },
-    { name = "uv", marker = "extra == 'dev'" },
     { name = "wheel", specifier = ">=0.43.0" },
 ]
-provides-extras = ["dev"]
 
 [package.metadata.requires-dev]
 dev = [
     { name = "black", specifier = ">=25.1.0" },
+    { name = "isort", specifier = ">=5.12.0" },
     { name = "pylint", specifier = ">=3.3.8" },
     { name = "pytest", specifier = ">=8.4.1" },
+    { name = "uv", specifier = ">=0.5.0" },
 ]
 
 [[package]]
