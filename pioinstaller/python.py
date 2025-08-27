@@ -193,8 +193,24 @@ def find_compatible_pythons(
             result.append(item)
 
     if not result and raise_exception:
+        # Try to download portable Python before giving up
+        log.debug("No compatible Python found, attempting to download portable Python")
+        try:
+            # Create a temporary directory for portable Python
+            with tempfile.TemporaryDirectory() as temp_dir:
+                portable_python = fetch_portable_python(temp_dir)
+                if portable_python and _is_python_compatible(portable_python):
+                    log.debug("Successfully downloaded and verified portable Python: %s",
+                             portable_python)
+                    result.append(portable_python)
+                    return result
+        except Exception as e:  # pylint: disable=broad-except
+            log.debug("Failed to download portable Python: %s", e)
+
+        # If portable Python download failed, raise the original error
         raise exception.IncompatiblePythonError(
-            "Could not find compatible Python 3.10 or above in your system."
+            "Could not find compatible Python 3.10 or above in your system. "
+            "Attempted to download portable Python but failed. "
             "Please install the latest official Python 3 and restart installation."
         )
 
