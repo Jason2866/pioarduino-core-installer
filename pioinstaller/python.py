@@ -126,10 +126,10 @@ def check():
         raise exception.IncompatiblePythonError("Unsupported Cygwin platform")
 
     # version check
-    if sys.version_info < (3, 6):
+    if sys.version_info < (3, 10):
         raise exception.IncompatiblePythonError(
             "Unsupported Python version: %s. "
-            "Minimum supported Python version is 3.7 or above."
+            "Minimum supported Python version is 3.10 or above."
             % platform.python_version(),
         )
 
@@ -180,11 +180,10 @@ def find_compatible_pythons(
         ignore_list.extend(glob.glob(p))
     exenames = [
         "python3",  # system Python
+        "python3.13",
+        "python3.12", 
         "python3.11",
         "python3.10",
-        "python3.9",
-        "python3.8",
-        "python3.7",
         "python",
     ]
     if util.IS_WINDOWS:
@@ -249,7 +248,7 @@ $ apt-get install python3.%d-venv
             )
 
         raise exception.IncompatiblePythonError(
-            "Could not find compatible Python 3.7 or above in your system."
+            "Could not find compatible Python 3.10 or above in your system."
             "Please install the latest official Python 3 and restart installation."
         )
 

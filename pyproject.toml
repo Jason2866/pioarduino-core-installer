@@ -1,0 +1,79 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "pioarduino-installer"
+version = "1.2.3"
+description = "An installer for PlatformIO pioarduino Core"
+readme = "README.rst"
+license = {text = "Apache-2.0"}
+authors = [
+    {name = "PlatformIO Labs and pioarduino", email = "contact@piolabs.com"}
+]
+keywords = ["platformio", "pioarduino", "installer", "iot", "embedded"]
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: Apache Software License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Software Development :: Embedded Systems",
+    "Topic :: System :: Installation/Setup",
+]
+requires-python = ">=3.10"
+dependencies = [
+    "click>=8.1.0",
+    "urllib3>=2.0",
+    "requests>=2.32.0",
+    "colorama>=0.4.6",
+    "semantic-version>=2.10.0",
+    "certifi>=2024.0.0",
+    "wheel>=0.43.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "black",
+    "isort", 
+    "pylint",
+    "pytest",
+    "uv",
+]
+
+[project.scripts]
+pioinstaller = "pioinstaller.__main__:main"
+
+[project.urls]
+Homepage = "https://pioarduino.org"
+Repository = "https://github.com/Jason2866/pioarduino-core-installer"
+Documentation = "https://pioarduino.org"
+"Bug Tracker" = "https://github.com/Jason2866/pioarduino-core-installer/issues"
+
+[tool.hatch.build.targets.sdist]
+exclude = [
+    "/.github",
+    "/tests",
+    "/.gitignore",
+    "/tox.ini",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["pioinstaller"]
+
+[tool.black]
+line-length = 88
+target-version = ['py310']
+
+[tool.isort]
+profile = "black"
+line_length = 88
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+addopts = "--verbose --capture=no"

@@ -28,6 +28,116 @@ log = logging.getLogger(__name__)
 
 VIRTUALENV_URL = "https://bootstrap.pypa.io/virtualenv/virtualenv.pyz"
 PIP_URL = "https://bootstrap.pypa.io/get-pip.py"
+UV_URL = "https://github.com/astral-sh/uv/releases/latest/download/uv-{platform}.tar.gz"
+
+
+def get_uv_platform():
+    """Get the uv platform identifier for the current system."""
+    platform_map = {
+        ("Windows", "AMD64"): "x86_64-pc-windows-msvc",
+        ("Windows", "x86"): "i686-pc-windows-msvc", 
+        ("Darwin", "x86_64"): "x86_64-apple-darwin",
+        ("Darwin", "arm64"): "aarch64-apple-darwin",
+        ("Linux", "x86_64"): "x86_64-unknown-linux-gnu",
+        ("Linux", "aarch64"): "aarch64-unknown-linux-gnu",
+        ("Linux", "armv7l"): "armv7-unknown-linux-gnueabihf",
+    }
+    
+    system = platform.system()
+    machine = platform.machine()
+    
+    # Handle different arm64 representations on macOS
+    if system == "Darwin" and machine in ("arm64", "aarch64"):
+        machine = "arm64"
+    
+    key = (system, machine)
+    if key in platform_map:
+        return platform_map[key]
+    
+    # Default fallback
+    if system == "Windows":
+        return "x86_64-pc-windows-msvc"
+    elif system == "Darwin":
+        return "x86_64-apple-darwin"
+    else:
+        return "x86_64-unknown-linux-gnu"
+
+
+def download_and_install_uv(cache_dir):
+    """Download and install uv package manager."""
+    uv_platform = get_uv_platform()
+    uv_url = f"https://github.com/astral-sh/uv/releases/latest/download/uv-{uv_platform}.tar.gz"
+    
+    log.debug("Downloading uv from %s", uv_url)
+    uv_archive_path = os.path.join(cache_dir, "tmp", f"uv-{uv_platform}.tar.gz")
+    
+    try:
+        util.download_file(uv_url, uv_archive_path)
+        
+        # Extract uv binary
+        import tarfile
+        with tarfile.open(uv_archive_path, 'r:gz') as tar:
+            # Extract all files to a temporary directory
+            extract_dir = os.path.join(cache_dir, "tmp", "uv-extract")
+            util.safe_remove_dir(extract_dir)
+            os.makedirs(extract_dir, exist_ok=True)
+            tar.extractall(extract_dir)
+            
+            # Find the uv binary in the extracted files
+            uv_binary = None
+            for root, dirs, files in os.walk(extract_dir):
+                for file in files:
+                    if file == "uv" or file == "uv.exe":
+                        uv_binary = os.path.join(root, file)
+                        break
+                if uv_binary:
+                    break
+            
+            if not uv_binary:
+                raise exception.PIOInstallerException("Could not find uv binary in downloaded archive")
+            
+            # Copy uv to cache directory
+            uv_dest = os.path.join(cache_dir, "uv" + (".exe" if util.IS_WINDOWS else ""))
+            import shutil
+            shutil.copy2(uv_binary, uv_dest)
+            
+            # Make executable on Unix systems
+            if not util.IS_WINDOWS:
+                os.chmod(uv_dest, 0o755)
+            
+            log.debug("uv installed at %s", uv_dest)
+            return uv_dest
+            
+    except Exception as e:
+        log.debug("Could not download or install uv: %s", str(e))
+        return None
+
+
+def get_uv_executable():
+    """Get path to uv executable, download if needed."""
+    # First try to find uv in PATH
+    uv_exe = util.where_is_program("uv")
+    if uv_exe:
+        log.debug("Found uv in PATH: %s", uv_exe)
+        return uv_exe
+    
+    # Try to find cached uv
+    from pioinstaller import core
+    cache_dir = core.get_cache_dir()
+    cached_uv = os.path.join(cache_dir, "uv" + (".exe" if util.IS_WINDOWS else ""))
+    
+    if os.path.isfile(cached_uv):
+        log.debug("Found cached uv: %s", cached_uv)
+        return cached_uv
+    
+    # Download and install uv
+    click.echo("Downloading and installing uv package manager...")
+    uv_exe = download_and_install_uv(cache_dir)
+    if uv_exe:
+        click.echo("uv has been successfully installed!")
+        return uv_exe
+    
+    return None
 
 
 def get_penv_dir(path=None):
@@ -47,6 +157,71 @@ def create_core_penv(penv_dir=None, ignore_pythons=None):
     penv_dir = penv_dir or get_penv_dir()
 
     click.echo("Creating a virtual environment at %s" % penv_dir)
+
+    # Get uv executable
+    uv_exe = get_uv_executable()
+    if not uv_exe:
+        click.echo("Could not install uv, falling back to traditional venv + pip method")
+        return create_core_penv_fallback(penv_dir, ignore_pythons)
+
+    result_dir = None
+    for python_exe in python.find_compatible_pythons(ignore_pythons):
+        result_dir = create_venv_with_uv(uv_exe, python_exe, penv_dir)
+        if result_dir:
+            break
+
+    if not result_dir and not python.is_portable():
+        python_exe = python.fetch_portable_python(os.path.dirname(penv_dir))
+        if python_exe:
+            result_dir = create_venv_with_uv(uv_exe, python_exe, penv_dir)
+
+    if not result_dir:
+        click.echo("Could not create virtual environment with uv, falling back to traditional method")
+        return create_core_penv_fallback(penv_dir, ignore_pythons)
+
+    python_exe = os.path.join(
+        get_penv_bin_dir(penv_dir), "python.exe" if util.IS_WINDOWS else "python"
+    )
+    init_state(python_exe, penv_dir)
+    click.echo("Virtual environment has been successfully created!")
+    return result_dir
+
+
+def create_venv_with_uv(uv_exe, python_exe, penv_dir):
+    """Create virtual environment using uv."""
+    log.debug("Using uv with %s Python for virtual environment.", python_exe)
+    
+    # Remove existing directory if it exists
+    util.safe_remove_dir(penv_dir)
+    
+    try:
+        # Create venv with uv
+        cmd = [uv_exe, "venv", "--python", python_exe, penv_dir]
+        log.debug("Running: %s", " ".join(cmd))
+        subprocess.check_call(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        
+        # Verify the venv was created
+        expected_python = os.path.join(
+            get_penv_bin_dir(penv_dir), "python.exe" if util.IS_WINDOWS else "python"
+        )
+        if os.path.isfile(expected_python):
+            log.debug("Successfully created venv at %s", penv_dir)
+            return penv_dir
+        else:
+            log.debug("Expected python not found at %s", expected_python)
+            return None
+            
+    except subprocess.CalledProcessError as e:
+        log.debug("Failed to create venv with uv: %s", str(e))
+        return None
+    except Exception as e:
+        log.debug("Error creating venv with uv: %s", str(e))
+        return None
+
+
+def create_core_penv_fallback(penv_dir=None, ignore_pythons=None):
+    """Fallback method using traditional venv + pip."""
+    penv_dir = penv_dir or get_penv_dir()
 
     result_dir = None
     for python_exe in python.find_compatible_pythons(ignore_pythons):
