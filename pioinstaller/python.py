@@ -200,8 +200,10 @@ def find_compatible_pythons(
             with tempfile.TemporaryDirectory() as temp_dir:
                 portable_python = fetch_portable_python(temp_dir)
                 if portable_python and _is_python_compatible(portable_python):
-                    log.debug("Successfully downloaded and verified portable Python: %s",
-                             portable_python)
+                    log.debug(
+                        "Successfully downloaded and verified portable Python: %s",
+                        portable_python,
+                    )
                     result.append(portable_python)
                     return result
         except Exception as e:  # pylint: disable=broad-except
