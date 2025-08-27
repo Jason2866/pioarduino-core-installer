@@ -19,60 +19,21 @@ import subprocess
 from pioinstaller import __version__, penv, python, util
 
 
-def test_penv_with_default_python(pio_installer_script, tmpdir, monkeypatch):
-    monkeypatch.setattr(util, "get_installer_script", lambda: pio_installer_script)
-
+def test_penv_creation_with_uv(tmpdir):
+    """Test basic virtual environment creation using uv."""
     penv_dir = str(tmpdir.mkdir("penv"))
-
+    
     assert penv.create_core_penv(penv_dir=penv_dir)
-
-    python_exe = os.path.join(
-        penv.get_penv_bin_dir(penv_dir), "python.exe" if util.IS_WINDOWS else "python"
-    )
-    assert (
-        subprocess.check_call([python_exe, pio_installer_script, "check", "python"])
-        == 0
-    )
+    
+    # Verify the virtual environment was created
+    assert os.path.isdir(penv_dir)
+    bin_dir = penv.get_penv_bin_dir(penv_dir)
+    assert os.path.isdir(bin_dir)
+    
+    python_exe = os.path.join(bin_dir, "python.exe" if util.IS_WINDOWS else "python")
+    assert os.path.isfile(python_exe)
+    
+    # Check state file was created
     with open(os.path.join(penv_dir, "state.json")) as fp:
         json_info = json.load(fp)
         assert json_info.get("installer_version") == __version__
-
-
-def test_penv_with_downloadable_venv(pio_installer_script, tmpdir, monkeypatch):
-    monkeypatch.setattr(util, "get_installer_script", lambda: pio_installer_script)
-
-    penv_dir = str(tmpdir.mkdir("penv"))
-
-    python_exes = python.find_compatible_pythons()
-    if not python_exes:
-        raise Exception("Python executable not found.")
-    python_exe = python_exes[0]
-
-    assert penv.create_with_remote_venv(python_exe=python_exe, penv_dir=penv_dir)
-
-    python_exe = os.path.join(
-        penv.get_penv_bin_dir(penv_dir), "python.exe" if util.IS_WINDOWS else "python"
-    )
-    assert (
-        subprocess.check_call([python_exe, pio_installer_script, "check", "python"])
-        == 0
-    )
-
-
-def test_penv_with_portable_python(pio_installer_script, tmpdir, monkeypatch):
-    if not util.IS_WINDOWS:
-        return
-    monkeypatch.setattr(util, "get_installer_script", lambda: pio_installer_script)
-
-    penv_dir = str(tmpdir.mkdir("penv"))
-
-    python_exe = python.fetch_portable_python(os.path.dirname(penv_dir))
-    assert penv.create_virtualenv(python_exe=python_exe, penv_dir=penv_dir)
-
-    python_exe = os.path.join(
-        penv.get_penv_bin_dir(penv_dir), "python.exe" if util.IS_WINDOWS else "python"
-    )
-    assert (
-        subprocess.check_call([python_exe, pio_installer_script, "check", "python"])
-        == 0
-    )

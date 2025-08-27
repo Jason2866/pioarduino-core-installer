@@ -25,6 +25,8 @@ from pioinstaller import util
 
 
 def create_wheels(package_dir, dest_dir):
+    # Use pip to create wheels with dependencies - install pip and setuptools first using uv  
+    subprocess.call(["uv", "pip", "install", "pip", "wheel", "setuptools"])
     subprocess.call(["pip", "wheel", "--wheel-dir", dest_dir, "."], cwd=package_dir)
 
 
@@ -40,8 +42,11 @@ def pack(target):
     create_wheels(os.path.dirname(util.get_source_dir()), tmp_dir)
 
     new_data = io.BytesIO()
-    for whl in os.listdir(tmp_dir):
-        with zipfile.ZipFile(os.path.join(tmp_dir, whl)) as existing_zip:
+    for filename in os.listdir(tmp_dir):
+        if not filename.endswith('.whl'):
+            continue
+        filepath = os.path.join(tmp_dir, filename)
+        with zipfile.ZipFile(filepath) as existing_zip:
             with zipfile.ZipFile(new_data, mode="a") as new_zip:
                 for zinfo in existing_zip.infolist():
                     if re.search(r"\.dist-info/", zinfo.filename):

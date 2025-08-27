@@ -165,9 +165,11 @@ def check():
 def find_compatible_pythons(
     ignore_pythons=None, raise_exception=True
 ):  # pylint: disable=too-many-branches
+    """Find compatible Python executables using direct version checks."""
     ignore_list = []
     for p in ignore_pythons or []:
         ignore_list.extend(glob.glob(p))
+    
     exenames = [
         "python3",  # system Python
         "python3.13",
@@ -178,6 +180,7 @@ def find_compatible_pythons(
     ]
     if util.IS_WINDOWS:
         exenames = ["%s.exe" % item for item in exenames]
+        
     log.debug("Current environment PATH %s", os.getenv("PATH"))
     candidates = []
     for exe in exenames:
@@ -197,29 +200,29 @@ def find_compatible_pythons(
             continue
         log.debug("Checking a Python candidate %s", item)
         try:
+            # Simple version check using Python itself
             output = subprocess.check_output(
-                [
-                    item,
-                    util.get_installer_script(),
-                    "--no-shutdown-piohome",
-                    "check",
-                    "python",
-                ],
+                [item, "-c", "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')"],
                 stderr=subprocess.STDOUT,
             )
-            result.append(item)
-            try:
-                log.debug(output.decode().strip())
-            except UnicodeDecodeError:
-                pass
+            version_str = output.decode().strip()
+            major, minor = map(int, version_str.split('.'))
+            
+            # Check if it's Python 3.10 or higher
+            if major >= 3 and minor >= 10:
+                result.append(item)
+                log.debug("Found compatible Python %s: %s", item, version_str)
+            else:
+                log.debug("Incompatible Python %s: %s", item, version_str)
+                
         except subprocess.CalledProcessError as e:
             try:
                 error = e.output.decode()
-                log.debug(error)
+                log.debug("Error checking Python %s: %s", item, error)
             except UnicodeDecodeError:
-                pass
+                log.debug("Error checking Python %s (decode failed)", item)
         except Exception as e:  # pylint: disable=broad-except
-            log.debug(e)
+            log.debug("Exception checking Python %s: %s", item, e)
 
     if not result and raise_exception:
         raise exception.IncompatiblePythonError(

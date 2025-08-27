@@ -35,7 +35,9 @@ PIO_CORE_API_URL = (
 )
 api_data = requests.get(PIO_CORE_API_URL, timeout=10).json()
 try:
-    data = api_data["zipball_url"]
+    # Get the tag name and construct a proper zip URL that uv will accept
+    tag_name = api_data["tag_name"]
+    data = f"https://github.com/pioarduino/platformio-core/archive/refs/tags/{tag_name}.zip"
 except KeyError:
     data = "https://github.com/pioarduino/platformio-core/archive/refs/tags/v6.1.16.zip"
     print("Could not download actual pioarduino core. Try to install v6.1.16 instead.")

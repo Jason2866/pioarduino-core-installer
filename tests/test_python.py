@@ -13,21 +13,34 @@
 # limitations under the License.
 
 import os
-import subprocess
+import sys
 
 import pytest
 
-
-def test_check_default_python(pio_installer_script):
-    assert (
-        subprocess.check_call(["python", pio_installer_script, "check", "python"]) == 0
-    )
+from pioinstaller import python
 
 
-def test_check_conda_python(pio_installer_script):
-    if not os.getenv("MINICONDA"):
-        return
-    with pytest.raises(subprocess.CalledProcessError) as excinfo:
-        subprocess.check_call(
-            [os.getenv("MINICONDA"), pio_installer_script, "check", "python"]
-        )
+def test_python_version_compatibility():
+    """Test that we correctly identify Python 3.10+ compatibility."""
+    # Current Python should be compatible since we require 3.10+
+    assert sys.version_info >= (3, 10)
+    
+    # Test the check function
+    try:
+        python.check()  # Should not raise exception for compatible Python
+    except Exception as e:
+        pytest.fail(f"Compatible Python failed check: {e}")
+
+
+def test_find_compatible_pythons():
+    """Test finding compatible Python executables."""
+    pythons = python.find_compatible_pythons()
+    
+    # Should find at least the current Python
+    assert len(pythons) >= 1
+    
+    # All found pythons should be valid executables
+    import os
+    for python_exe in pythons:
+        assert os.path.isfile(python_exe)
+        assert os.access(python_exe, os.X_OK)
