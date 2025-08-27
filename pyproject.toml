@@ -3,14 +3,12 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "pioarduino-installer"
-version = "1.2.3"
-description = "An installer for PlatformIO pioarduino Core"
+name = __title__
+version = __version__
+description = __description__
 readme = "README.rst"
-license = {text = "Apache-2.0"}
-authors = [
-    {name = "PlatformIO Labs and pioarduino", email = "contact@piolabs.com"}
-]
+license = __license__
+authors = __author__
 keywords = ["platformio", "pioarduino", "installer", "iot", "embedded"]
 classifiers = [
     "Development Status :: 5 - Production/Stable",
@@ -49,10 +47,10 @@ dev = [
 pioinstaller = "pioinstaller.__main__:main"
 
 [project.urls]
-Homepage = "https://pioarduino.org"
-Repository = "https://github.com/Jason2866/pioarduino-core-installer"
-Documentation = "https://pioarduino.org"
-"Bug Tracker" = "https://github.com/Jason2866/pioarduino-core-installer/issues"
+Homepage = "https://github.com/pioarduino"
+Repository = "https://github.com/pioarduino/pioarduino-core-installer"
+Documentation = "https://github.com/pioarduino"
+"Bug Tracker" = "https://github.com/pioarduino/pioarduino-core-installer/issues"
 
 [tool.hatch.build.targets.sdist]
 exclude = [
