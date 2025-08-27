@@ -169,7 +169,7 @@ def find_compatible_pythons(
     ignore_list = []
     for p in ignore_pythons or []:
         ignore_list.extend(glob.glob(p))
-    
+
     exenames = [
         "python3",  # system Python
         "python3.13",
@@ -180,8 +180,29 @@ def find_compatible_pythons(
     ]
     if util.IS_WINDOWS:
         exenames = ["%s.exe" % item for item in exenames]
-        
+
     log.debug("Current environment PATH %s", os.getenv("PATH"))
+    candidates = _get_python_candidates(exenames)
+
+    result = []
+    for item in candidates:
+        if item in ignore_list:
+            continue
+        log.debug("Checking a Python candidate %s", item)
+        if _is_python_compatible(item):
+            result.append(item)
+
+    if not result and raise_exception:
+        raise exception.IncompatiblePythonError(
+            "Could not find compatible Python 3.10 or above in your system."
+            "Please install the latest official Python 3 and restart installation."
+        )
+
+    return result
+
+
+def _get_python_candidates(exenames):
+    """Get list of Python executable candidates."""
     candidates = []
     for exe in exenames:
         for path in os.getenv("PATH").split(os.pathsep):
@@ -193,41 +214,34 @@ def find_compatible_pythons(
         candidates.remove(sys.executable)
     # put current Python to the top of list
     candidates.insert(0, sys.executable)
+    return candidates
 
-    result = []
-    for item in candidates:
-        if item in ignore_list:
-            continue
-        log.debug("Checking a Python candidate %s", item)
+
+def _is_python_compatible(python_exe):
+    """Check if a Python executable is compatible (3.10+)."""
+    try:
+        # Simple version check using Python itself
+        cmd = [python_exe, "-c",
+               "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')"]
+        output = subprocess.check_output(cmd, stderr=subprocess.STDOUT)
+        version_str = output.decode().strip()
+        major, minor = map(int, version_str.split('.'))
+
+        # Check if it's Python 3.10 or higher
+        if major >= 3 and minor >= 10:
+            log.debug("Found compatible Python %s: %s", python_exe, version_str)
+            return True
+
+        log.debug("Incompatible Python %s: %s", python_exe, version_str)
+        return False
+
+    except subprocess.CalledProcessError as e:
         try:
-            # Simple version check using Python itself
-            output = subprocess.check_output(
-                [item, "-c", "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')"],
-                stderr=subprocess.STDOUT,
-            )
-            version_str = output.decode().strip()
-            major, minor = map(int, version_str.split('.'))
-            
-            # Check if it's Python 3.10 or higher
-            if major >= 3 and minor >= 10:
-                result.append(item)
-                log.debug("Found compatible Python %s: %s", item, version_str)
-            else:
-                log.debug("Incompatible Python %s: %s", item, version_str)
-                
-        except subprocess.CalledProcessError as e:
-            try:
-                error = e.output.decode()
-                log.debug("Error checking Python %s: %s", item, error)
-            except UnicodeDecodeError:
-                log.debug("Error checking Python %s (decode failed)", item)
-        except Exception as e:  # pylint: disable=broad-except
-            log.debug("Exception checking Python %s: %s", item, e)
+            error = e.output.decode()
+            log.debug("Error checking Python %s: %s", python_exe, error)
+        except UnicodeDecodeError:
+            log.debug("Error checking Python %s (decode failed)", python_exe)
+    except Exception as e:  # pylint: disable=broad-except
+        log.debug("Exception checking Python %s: %s", python_exe, e)
 
-    if not result and raise_exception:
-        raise exception.IncompatiblePythonError(
-            "Could not find compatible Python 3.10 or above in your system."
-            "Please install the latest official Python 3 and restart installation."
-        )
-
-    return result
+    return False

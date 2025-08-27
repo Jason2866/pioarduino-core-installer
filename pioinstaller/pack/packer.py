@@ -25,7 +25,7 @@ from pioinstaller import util
 
 
 def create_wheels(package_dir, dest_dir):
-    # Use pip to create wheels with dependencies - install pip and setuptools first using uv  
+    # Use pip to create wheels with dependencies - install pip and setuptools first using uv
     subprocess.call(["uv", "pip", "install", "pip", "wheel", "setuptools"])
     subprocess.call(["pip", "wheel", "--wheel-dir", dest_dir, "."], cwd=package_dir)
 
