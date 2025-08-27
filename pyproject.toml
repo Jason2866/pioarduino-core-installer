@@ -4,6 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "pioarduino-installer"
+dynamic = ["version"]
 description = "An installer for PlatformIO pioarduino Core"
 readme = "README.rst"
 license = {text = "Apache-2.0"}
