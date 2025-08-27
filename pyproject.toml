@@ -4,7 +4,6 @@ build-backend = "hatchling.build"
 
 [project]
 name = "pioarduino-installer"
-version = "1.2.3"
 description = "An installer for PlatformIO pioarduino Core"
 readme = "README.rst"
 license = {text = "Apache-2.0"}
@@ -44,6 +43,9 @@ Homepage = "https://github.com/pioarduino"
 Repository = "https://github.com/pioarduino/pioarduino-core-installer"
 Documentation = "https://github.com/pioarduino"
 "Bug Tracker" = "https://github.com/pioarduino/pioarduino-core-installer/issues"
+
+[tool.hatch.version]
+path = "pioinstaller/__init__.py"
 
 [tool.hatch.build.targets.sdist]
 exclude = [
