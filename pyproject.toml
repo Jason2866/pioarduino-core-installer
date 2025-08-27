@@ -3,12 +3,14 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = __title__
-version = __version__
-description = __description__
+name = "pioarduino-installer"
+version = "1.2.3"
+description = "An installer for PlatformIO pioarduino Core"
 readme = "README.rst"
-license = __license__
-authors = __author__
+license = {text = "Apache-2.0"}
+authors = [
+    {name = "PlatformIO Labs and pioarduino"}
+]
 keywords = ["platformio", "pioarduino", "installer", "iot", "embedded"]
 classifiers = [
     "Development Status :: 5 - Production/Stable",
