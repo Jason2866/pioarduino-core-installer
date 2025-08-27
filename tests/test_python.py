@@ -24,7 +24,7 @@ def test_python_version_compatibility():
     """Test that we correctly identify Python 3.10+ compatibility."""
     # Current Python should be compatible since we require 3.10+
     assert sys.version_info >= (3, 10)
-    
+
     # Test the check function
     try:
         python.check()  # Should not raise exception for compatible Python
@@ -35,12 +35,13 @@ def test_python_version_compatibility():
 def test_find_compatible_pythons():
     """Test finding compatible Python executables."""
     pythons = python.find_compatible_pythons()
-    
+
     # Should find at least the current Python
     assert len(pythons) >= 1
-    
+
     # All found pythons should be valid executables
     import os
+
     for python_exe in pythons:
         assert os.path.isfile(python_exe)
         assert os.access(python_exe, os.X_OK)

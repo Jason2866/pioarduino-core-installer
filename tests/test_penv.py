@@ -22,17 +22,17 @@ from pioinstaller import __version__, penv, python, util
 def test_penv_creation_with_uv(tmpdir):
     """Test basic virtual environment creation using uv."""
     penv_dir = str(tmpdir.mkdir("penv"))
-    
+
     assert penv.create_core_penv(penv_dir=penv_dir)
-    
+
     # Verify the virtual environment was created
     assert os.path.isdir(penv_dir)
     bin_dir = penv.get_penv_bin_dir(penv_dir)
     assert os.path.isdir(bin_dir)
-    
+
     python_exe = os.path.join(bin_dir, "python.exe" if util.IS_WINDOWS else "python")
     assert os.path.isfile(python_exe)
-    
+
     # Check state file was created
     with open(os.path.join(penv_dir, "state.json")) as fp:
         json_info = json.load(fp)

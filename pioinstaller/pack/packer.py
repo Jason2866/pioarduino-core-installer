@@ -43,7 +43,7 @@ def pack(target):
 
     new_data = io.BytesIO()
     for filename in os.listdir(tmp_dir):
-        if not filename.endswith('.whl'):
+        if not filename.endswith(".whl"):
             continue
         filepath = os.path.join(tmp_dir, filename)
         with zipfile.ZipFile(filepath) as existing_zip:

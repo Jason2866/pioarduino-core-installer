@@ -221,11 +221,14 @@ def _is_python_compatible(python_exe):
     """Check if a Python executable is compatible (3.10+)."""
     try:
         # Simple version check using Python itself
-        cmd = [python_exe, "-c",
-               "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')"]
+        cmd = [
+            python_exe,
+            "-c",
+            "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')",
+        ]
         output = subprocess.check_output(cmd, stderr=subprocess.STDOUT)
         version_str = output.decode().strip()
-        major, minor = map(int, version_str.split('.'))
+        major, minor = map(int, version_str.split("."))
 
         # Check if it's Python 3.10 or higher
         if major >= 3 and minor >= 10:
