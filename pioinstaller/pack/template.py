@@ -98,46 +98,59 @@ def extract_native_extensions(pioinstaller_zip, tmp_dir):
                     'backend_cffi.py' in member):
 
                     try:
-                        # Extract to native extensions directory
+                        # KRITISCH: Extrahiere mit korrekter Verzeichnisstruktur
                         zip_ref.extract(member, native_extensions_dir)
                         extracted_count += 1
-
-                        # Log successful extraction
                         print(f"Extracted native extension: {member}")
 
+                        # ZUSÄTZLICH: Erstelle symbolische Links für direkte Auffindung
+                        if 'zstandard/' in member:
+                            # Erstelle auch direkten Zugriff auf zstandard Dateien
+                            source_path = os.path.join(native_extensions_dir,
+                                                     member)
+                            direct_path = os.path.join(native_extensions_dir,
+                                                     os.path.basename(member))
+                            try:
+                                if not os.path.exists(direct_path):
+                                    os.symlink(source_path, direct_path)
+                            except OSError:
+                                # Fallback: Kopiere Datei wenn symlink fehlschlägt
+                                shutil.copy2(source_path, direct_path)
+
                     except (OSError, zipfile.BadZipFile) as e:
-                        # Continue if individual extraction fails
                         print(f"Warning: Failed to extract {member}: {e}")
                         continue
 
         if extracted_count > 0:
-            # CRITICAL: Add native extensions dir to Python path FIRST
+            # KRITISCH: Mehrere Pfade hinzufügen
             sys.path.insert(0, native_extensions_dir)
 
-            # Set LD_LIBRARY_PATH for Linux shared libraries
+            # Auch zstandard Unterverzeichnis hinzufügen
+            zstandard_dir = os.path.join(native_extensions_dir, "zstandard")
+            if os.path.exists(zstandard_dir):
+                sys.path.insert(0, zstandard_dir)
+
+            # Umgebungsvariablen setzen
             current_ld_path = os.environ.get('LD_LIBRARY_PATH', '')
             if current_ld_path:
-                os.environ['LD_LIBRARY_PATH'] = (
-                    f"{native_extensions_dir}:{current_ld_path}"
-                )
+                new_ld_path = f"{native_extensions_dir}:{zstandard_dir}:{current_ld_path}"
             else:
-                os.environ['LD_LIBRARY_PATH'] = native_extensions_dir
+                new_ld_path = f"{native_extensions_dir}:{zstandard_dir}"
+            os.environ['LD_LIBRARY_PATH'] = new_ld_path
 
-            # Set PATH for Windows DLLs
             current_path = os.environ.get('PATH', '')
             if current_path:
-                os.environ['PATH'] = (
-                    f"{native_extensions_dir};{current_path}"
-                )
+                new_path = f"{native_extensions_dir};{zstandard_dir};{current_path}"
             else:
-                os.environ['PATH'] = native_extensions_dir
+                new_path = f"{native_extensions_dir};{zstandard_dir}"
+            os.environ['PATH'] = new_path
 
             print(f"Extracted {extracted_count} native extensions successfully")
+            print(f"Added paths: {native_extensions_dir}, {zstandard_dir}")
             return native_extensions_dir
 
     except (OSError, zipfile.BadZipFile) as e:
         print(f"Error during native extension extraction: {e}")
-        # Continue without native extensions - may cause import errors later
 
     return None
 
