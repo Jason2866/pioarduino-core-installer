@@ -28,10 +28,22 @@ import shutil
 import subprocess
 import tempfile
 import zipfile
+from string import Template
 
 from pioinstaller import util
 
 log = logging.getLogger(__name__)
+
+
+class SafeDict(dict):
+    """Dictionary that returns empty string for missing keys."""
+    def __missing__(self, key):
+        return ''
+
+
+def safe_substitute(template_str, mapping):
+    """Safely substitute template variables, missing keys become empty."""
+    return Template(template_str).substitute(SafeDict(mapping))
 
 
 def _validate_zstandard_wheel(wheel_dir):
@@ -56,9 +68,7 @@ def _validate_zstandard_wheel(wheel_dir):
                     log.error("zstandard wheel %s missing backend files",
                              filename)
                     log.error("Available files: %s", files[:10])
-                    raise RuntimeError(
-                        "zstandard wheel missing backend files"
-                    )
+                    raise RuntimeError("zstandard wheel missing backend files")
 
                 log.info("zstandard wheel %s contains backend files: %s",
                        filename, backend_files[:5])
@@ -194,8 +204,17 @@ def pack(target):
         with open(template_path, encoding="utf-8") as fptlp:
             content = fptlp.read()
 
+        # Safe template substitution - handles missing variables
+        template_vars = {
+            'zipfile_content': zipdata,
+            'native_extensions_dir': '',
+            'current_ld_path': ''
+        }
+
+        result = safe_substitute(content, template_vars)
+
         with open(target, "w", encoding="utf-8") as fp:
-            fp.write(content.format(zipfile_content=zipdata))
+            fp.write(result)
 
         oldmode = os.stat(target).st_mode & 0o7777
         newmode = (oldmode | 0o555) & 0o7777
