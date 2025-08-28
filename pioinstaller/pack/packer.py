@@ -37,6 +37,7 @@ def create_wheels(package_dir, dest_dir):
 
 
 def pack(target):
+    """Create a packed installer script with all dependencies."""
     assert isinstance(target, str)
 
     if os.path.isdir(target):
@@ -45,32 +46,49 @@ def pack(target):
         os.makedirs(os.path.dirname(target))
 
     tmp_dir = tempfile.mkdtemp()
-    create_wheels(os.path.dirname(util.get_source_dir()), tmp_dir)
+    
+    try:
+        create_wheels(os.path.dirname(util.get_source_dir()), tmp_dir)
 
-    new_data = io.BytesIO()
-    for filename in os.listdir(tmp_dir):
-        if not filename.endswith(".whl"):
-            continue
-        filepath = os.path.join(tmp_dir, filename)
-        with zipfile.ZipFile(filepath) as existing_zip:
-            with zipfile.ZipFile(new_data, mode="a") as new_zip:
-                for zinfo in existing_zip.infolist():
-                    # Keep some metadata for packages that need it like semantic_version
-                    if re.search(r"\.dist-info/(METADATA|PKG-INFO)$", zinfo.filename):
-                        new_zip.writestr(zinfo, existing_zip.read(zinfo))
-                    elif not re.search(r"\.dist-info/", zinfo.filename):
-                        new_zip.writestr(zinfo, existing_zip.read(zinfo))
-    zipdata = base64.b64encode(new_data.getvalue()).decode("utf8")
-    with open(target, "w") as fp:
-        with open(os.path.join(util.get_source_dir(), "pack", "template.py")) as fptlp:
-            fp.write(fptlp.read().format(zipfile_content=zipdata))
+        new_data = io.BytesIO()
+        wheels_found = []
+        
+        for filename in os.listdir(tmp_dir):
+            if not filename.endswith(".whl"):
+                continue
+            wheels_found.append(filename)
+            filepath = os.path.join(tmp_dir, filename)
+            
+            with zipfile.ZipFile(filepath) as existing_zip:
+                with zipfile.ZipFile(new_data, mode="a") as new_zip:
+                    for zinfo in existing_zip.infolist():
+                        # Keep metadata for packages that need it
+                        if re.search(r"\.dist-info/(METADATA|PKG-INFO)$", 
+                                   zinfo.filename):
+                            new_zip.writestr(zinfo, existing_zip.read(zinfo))
+                        elif not re.search(r"\.dist-info/", zinfo.filename):
+                            new_zip.writestr(zinfo, existing_zip.read(zinfo))
+        
+        # Verify critical dependencies are included
+        critical_deps = ['zstandard', 'requests']
+        for dep in critical_deps:
+            if not any(dep.lower() in wheel.lower() for wheel in wheels_found):
+                print(f"Warning: {dep} dependency not found in wheels: {wheels_found}")
+        
+        zipdata = base64.b64encode(new_data.getvalue()).decode("utf8")
+        
+        with open(target, "w") as fp:
+            template_path = os.path.join(util.get_source_dir(), "pack", "template.py")
+            with open(template_path) as fptlp:
+                fp.write(fptlp.read().format(zipfile_content=zipdata))
 
-    # Ensure the permissions on the newly created file
-    oldmode = os.stat(target).st_mode & 0o7777
-    newmode = (oldmode | 0o555) & 0o7777
-    os.chmod(target, newmode)
+        # Ensure the permissions on the newly created file
+        oldmode = os.stat(target).st_mode & 0o7777
+        newmode = (oldmode | 0o555) & 0o7777
+        os.chmod(target, newmode)
 
-    # Clearing up
-    shutil.rmtree(tmp_dir)
-
-    return target
+        return target
+        
+    finally:
+        # Clearing up
+        shutil.rmtree(tmp_dir)
