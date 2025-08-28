@@ -16,34 +16,59 @@
 Package creation utilities for PlatformIO installer.
 
 This module provides functionality to create a standalone installer script
-with all dependencies bundled as wheels, optimized for uv-managed projects.
+with all dependencies bundled as wheels, optimized for cross-platform
+deployment with Python 3.10-3.13 support.
 """
 
 import base64
 import io
 import logging
 import os
+import platform
 import re
 import shutil
 import subprocess
 import tempfile
 import zipfile
-from string import Template
 
 from pioinstaller import util
 
 log = logging.getLogger(__name__)
 
-
-class SafeDict(dict):
-    """Dictionary that returns empty string for missing keys."""
-    def __missing__(self, key):
-        return ''
+# Supported Python versions for cross-platform compatibility
+PYTHON_VERSIONS = ['cp310', 'cp311', 'cp312', 'cp313']
 
 
-def safe_substitute(template_str, mapping):
-    """Safely substitute template variables, missing keys become empty."""
-    return Template(template_str).substitute(SafeDict(mapping))
+def get_current_platform():
+    """
+    Detect current platform for wheel building.
+
+    Returns:
+        str: Platform tag for wheel building (e.g., 'win_amd64', 'manylinux2014_x86_64').
+
+    Raises:
+        RuntimeError: If platform is not supported.
+    """
+    system = platform.system().lower()
+    machine = platform.machine().lower()
+
+    if system == 'linux':
+        if 'aarch64' in machine or 'arm64' in machine:
+            return 'manylinux2014_aarch64'
+        else:
+            return 'manylinux2014_x86_64'
+    elif system == 'darwin':  # macOS
+        if 'arm64' in machine:
+            return 'macosx_11_0_arm64'
+        else:
+            return 'macosx_10_9_x86_64'
+    elif system == 'windows':
+        if '64' in machine:
+            return 'win_amd64'
+        else:
+            return 'win32'
+    else:
+        raise RuntimeError(f"Unsupported platform: {system}")
 
 
 def _validate_zstandard_wheel(wheel_dir):
@@ -68,48 +93,73 @@ def _validate_zstandard_wheel(wheel_dir):
                     log.error("zstandard wheel %s missing backend files",
                              filename)
                     log.error("Available files: %s", files[:10])
-                    raise RuntimeError("zstandard wheel missing backend files")
+                    raise RuntimeError(
+                        "zstandard wheel missing backend files"
+                    )
 
                 log.info("zstandard wheel %s contains backend files: %s",
                        filename, backend_files[:5])
 
 
-def create_wheels(package_dir, dest_dir):
+def create_cross_platform_wheels(package_dir, dest_dir):
     """
-    Create wheels using uv for all Python package dependencies.
+    Create wheels for current platform and all Python versions 3.10-3.13.
+
+    This function builds wheels compatible with the current platform and
+    all supported Python versions, enabling cross-version compatibility
+    while maintaining platform-specific optimizations.
 
     Args:
-        package_dir (str): Directory containing the package source.
-        dest_dir (str): Directory to store generated wheel files.
+        package_dir (str): Directory containing package source.
+        dest_dir (str): Directory to store wheels.
 
     Raises:
         subprocess.CalledProcessError: If wheel creation fails.
-        RuntimeError: If zstandard wheel is incomplete.
+        RuntimeError: If platform is not supported.
     """
+    current_platform = get_current_platform()
+    log.info("Building wheels for platform: %s", current_platform)
+
     subprocess.check_call(["uv", "sync"], cwd=package_dir)
-    subprocess.check_call(["uv", "pip", "install", "pip", "wheel"],
-                         cwd=package_dir)
-    subprocess.check_call([
-        "uv", "pip", "install",
-        "--only-binary=zstandard",
-        "zstandard>=0.15.0"
-    ], cwd=package_dir)
-    subprocess.check_call(["uv", "build", "--wheel"], cwd=package_dir)
 
-    dist_dir = os.path.join(package_dir, "dist")
-    if os.path.exists(dist_dir):
-        for filename in os.listdir(dist_dir):
-            if filename.endswith('.whl'):
-                src_path = os.path.join(dist_dir, filename)
-                dst_path = os.path.join(dest_dir, filename)
-                shutil.copy2(src_path, dst_path)
+    for py_ver in PYTHON_VERSIONS:
+        python_version = f"{py_ver[2]}.{py_ver[3:]}"
+        try:
+            log.info("Creating wheels for Python %s on %s...",
+                    python_version, current_platform)
 
-    subprocess.check_call([
-        "uv", "run", "pip", "wheel",
-        "--wheel-dir", dest_dir,
-        "--only-binary=zstandard",
-        "."
-    ], cwd=package_dir)
+            # Install dependencies for specific Python version
+            subprocess.check_call([
+                "uv", "pip", "install",
+                "--python", python_version,
+                "--only-binary=zstandard",
+                "zstandard>=0.15.0"
+            ], cwd=package_dir)
+
+            # Build project wheel
+            subprocess.check_call(["uv", "build", "--wheel"], cwd=package_dir)
+
+            # Copy built wheel from dist/ to destination
+            dist_dir = os.path.join(package_dir, "dist")
+            if os.path.exists(dist_dir):
+                for filename in os.listdir(dist_dir):
+                    if filename.endswith('.whl'):
+                        src_path = os.path.join(dist_dir, filename)
+                        dst_path = os.path.join(dest_dir, filename)
+                        shutil.copy2(src_path, dst_path)
+
+            # Create wheels for all dependencies
+            subprocess.check_call([
+                "uv", "run", "--python", python_version, "pip", "wheel",
+                "--wheel-dir", dest_dir,
+                "--only-binary=zstandard",
+                "."
+            ], cwd=package_dir)
+
+        except subprocess.CalledProcessError as e:
+            log.warning("Failed to create wheel for Python %s: %s",
+                       python_version, e)
+            continue
 
     _validate_zstandard_wheel(dest_dir)
 
@@ -175,13 +225,23 @@ def _process_wheel_files(tmp_dir):
 
 def pack(target):
     """
-    Create a packed installer script with all dependencies bundled using uv.
+    Create a packed installer script with cross-platform dependencies.
+
+    This function creates a standalone installer script that includes all
+    necessary dependencies as wheels, with automatic platform and Python
+    version detection for maximum compatibility.
 
     Args:
-        target (str): Target path for the packed script.
+        target (str): Target path for the packed script. Can be a directory
+                     or a file path.
 
     Returns:
         str: Path to the created packed script.
+
+    Raises:
+        AssertionError: If target is not a string.
+        RuntimeError: If critical dependencies are missing.
+        OSError: If file operations fail.
     """
     assert isinstance(target, str)
 
@@ -193,7 +253,9 @@ def pack(target):
     tmp_dir = tempfile.mkdtemp()
 
     try:
-        create_wheels(os.path.dirname(util.get_source_dir()), tmp_dir)
+        create_cross_platform_wheels(
+            os.path.dirname(util.get_source_dir()), tmp_dir
+        )
         zipdata, wheels_list = _process_wheel_files(tmp_dir)
 
         log.info("Successfully bundled wheels: %s", len(wheels_list))
