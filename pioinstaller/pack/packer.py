@@ -211,7 +211,7 @@ def pack(target):
             'current_ld_path': ''
         }
 
-        result = safe_substitute(content, template_vars)
+        result = content.replace('$zipfile_content', zipdata)
 
         with open(target, "w", encoding="utf-8") as fp:
             fp.write(result)
