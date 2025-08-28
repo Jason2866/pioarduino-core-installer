@@ -57,6 +57,10 @@ def test_uv_installed_in_penv(tmpdir):
         result = subprocess.run(
             [uv_exe, "help"], capture_output=True, text=True, check=True, timeout=10
         )
+        # Print UV help output to show that UV is working
+        print("\nUV Help Output:")
+        print(result.stdout)
+        
         # Check that help output contains expected content
         assert "uv" in result.stdout.lower()
         assert "help" in result.stdout.lower() or "usage" in result.stdout.lower()
