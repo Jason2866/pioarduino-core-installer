@@ -13,13 +13,17 @@
 # limitations under the License.
 
 import glob
+import hashlib
 import json
 import logging
 import os
 import platform
+import re
 import subprocess
 import sys
 import tempfile
+import time
+from functools import lru_cache
 
 import requests
 import semantic_version
@@ -28,6 +32,20 @@ from pioinstaller import exception, util
 
 log = logging.getLogger(__name__)
 
+# Cache for parsed release data to avoid repeated API calls
+_cached_release_data = None
+_cached_latest_tag = None
+_RELEASE_CACHE_TTL = 300  # 5 minutes
+_release_cache_time = 0
+_latest_tag_cache_time = 0
+
+# Fallback release tag if latest release has incompatible naming
+_FALLBACK_RELEASE_TAG = '20250818'
+
+# Pre-compiled regex for better performance
+_ASSET_NAME_REGEX = re.compile(
+    r'^cpython-(\d+\.\d+\.\d+)\+(\d+)-([^-]+)-([^-]+)-([^-]+)(?:-([^-]+))?(?:-([^.]+))?\.(tar\.(?:gz|zst))$'
+)
 
 def is_conda():
     return any(
@@ -45,10 +63,10 @@ def is_conda():
 def is_portable():
     try:
         __import__("winpython")
-
         return True
     except:  # pylint:disable=bare-except
         pass
+    
     print(os.path.normpath(sys.executable))
     python_dir = os.path.dirname(sys.executable)
     if not util.IS_WINDOWS:
@@ -58,64 +76,397 @@ def is_portable():
     if not os.path.isfile(manifest_path):
         return False
     try:
-        with open(manifest_path) as fp:
+        with open(manifest_path, encoding='utf-8') as fp:
             return json.load(fp).get("name") == "python-portable"
-    except ValueError:
+    except (ValueError, UnicodeDecodeError):
         pass
     return False
 
 
+def _calculate_file_sha256(filepath):
+    """Calculate SHA256 hash of a file."""
+    hash_sha256 = hashlib.sha256()
+    with open(filepath, "rb") as f:
+        for chunk in iter(lambda: f.read(4096), b""):
+            hash_sha256.update(chunk)
+    return hash_sha256.hexdigest()
+
+
+def _verify_file_integrity(filepath, expected_sha):
+    """Verify file integrity using SHA256 checksum."""
+    try:
+        actual_sha = _calculate_file_sha256(filepath)
+        expected_sha_clean = expected_sha.replace('sha256:', '').lower()
+        actual_sha_clean = actual_sha.lower()
+        
+        if actual_sha_clean == expected_sha_clean:
+            log.debug(f"File integrity verified: {os.path.basename(filepath)}")
+            return True
+        else:
+            log.error(f"File integrity check failed: expected {expected_sha_clean}, got {actual_sha_clean}")
+            return False
+    except Exception as err:
+        log.error(f"SHA256 verification failed: {err}")
+        return False
+
+
+def _get_latest_release_tag():
+    """Get the latest release tag from GitHub API with caching."""
+    global _cached_latest_tag, _latest_tag_cache_time
+    
+    now = time.time()
+    
+    # Use cached tag if still valid
+    if _cached_latest_tag and (now - _latest_tag_cache_time) < _RELEASE_CACHE_TTL:
+        return _cached_latest_tag
+    
+    try:
+        log.debug('Fetching latest release tag from GitHub')
+        response = requests.get(
+            'https://api.github.com/repos/astral-sh/python-build-standalone/releases/latest',
+            timeout=10,
+            headers={
+                'Accept': 'application/vnd.github.v3+json',
+                'User-Agent': 'PlatformIO-Python-Installer',
+            }
+        )
+        response.raise_for_status()
+        
+        latest_release = response.json()
+        _cached_latest_tag = latest_release['tag_name']
+        _latest_tag_cache_time = now
+        
+        log.debug(f"Using latest release: {_cached_latest_tag}")
+        return _cached_latest_tag
+    except Exception as err:
+        # Fallback to known stable release if API fails
+        log.warning(f"Failed to get latest release, using fallback: {_FALLBACK_RELEASE_TAG}")
+        return _FALLBACK_RELEASE_TAG
+
+
+def _parse_asset_name(asset_name):
+    """Parse asset filename to extract metadata."""
+    match = _ASSET_NAME_REGEX.match(asset_name)
+    
+    if not match:
+        return None
+
+    return {
+        'python_version': match.group(1),
+        'build_date': match.group(2),
+        'arch': match.group(3),
+        'os': match.group(4),
+        'libc': match.group(5),
+        'build_variant': match.group(6) or '',
+        'package_type': match.group(7) or '',
+        'compression': match.group(8),
+    }
+
+
+def _parse_asset_name_fallback(asset_name):
+    """Fallback parsing for alternative naming schemes."""
+    # Alternative regex patterns for different naming conventions
+    fallback_patterns = [
+        # Pattern for simplified naming: cpython-3.13.7-linux-x64.tar.gz
+        re.compile(r'^cpython-(\d+\.\d+\.\d+)-([^-]+)-([^.]+)\.(tar\.(?:gz|zst))$'),
+        # Pattern for date-only naming: python-3.13.7-20250818-linux-x64.tar.gz
+        re.compile(r'^python-(\d+\.\d+\.\d+)-(\d+)-([^-]+)-([^.]+)\.(tar\.(?:gz|zst))$'),
+        # Generic Python naming: python-3.13.7-linux-x64.tar.gz
+        re.compile(r'^python-(\d+\.\d+\.\d+)-([^-]+)-([^.]+)\.(tar\.(?:gz|zst))$'),
+    ]
+
+    for pattern in fallback_patterns:
+        match = pattern.match(asset_name)
+        if match:
+            groups = match.groups()
+            # Map to standardized format
+            return {
+                'python_version': groups[0],
+                'build_date': groups[1] if len(groups) > 3 else 'unknown',
+                'arch': groups[-3] if len(groups) > 2 else 'unknown',
+                'os': groups[-4] if len(groups) > 3 else 'unknown',
+                'libc': 'unknown',
+                'build_variant': '',
+                'package_type': 'install_only',
+                'compression': groups[-1],
+            }
+
+    return None
+
+
+@lru_cache(maxsize=32)
+def _get_system_mapping(systype):
+    """Get system mapping for architecture compatibility (cached)."""
+    mappings = {
+        'darwin-x64': {'arch': 'x86_64', 'os': 'apple', 'libc': 'darwin'},
+        'darwin-arm64': {'arch': 'aarch64', 'os': 'apple', 'libc': 'darwin'},
+        'linux-x64': {'arch': 'x86_64', 'os': 'unknown', 'libc': 'linux'},
+        'linux-arm64': {'arch': 'aarch64', 'os': 'unknown', 'libc': 'linux'},
+        'linux-armv7l': {'arch': 'armv7', 'os': 'unknown', 'libc': 'linux'},
+        'win32-x64': {'arch': 'x86_64', 'os': 'pc', 'libc': 'windows'},
+        'win32-ia32': {'arch': 'i686', 'os': 'pc', 'libc': 'windows'},
+    }
+    return mappings.get(systype)
+
+
+def _is_asset_compatible(asset_name, systype):
+    """Check if asset is compatible with target system."""
+    parsed = _parse_asset_name(asset_name)
+    if not parsed:
+        return False
+
+    # Quick Python version check (max 3.13)
+    version_parts = parsed['python_version'].split('.')
+    major = int(version_parts[0])
+    minor = int(version_parts[1])
+    if major != 3 or minor > 13:
+        return False
+
+    # Exclude unwanted build variants
+    build_variant = parsed['build_variant']
+    if build_variant and any(variant in build_variant for variant in 
+                           ['freethreaded', 'debug', 'noopt']):
+        return False
+
+    # System compatibility mapping
+    system_map = _get_system_mapping(systype)
+    if not system_map:
+        return False
+
+    return (parsed['arch'] == system_map['arch'] and 
+            parsed['os'] == system_map['os'] and 
+            parsed['libc'].startswith(system_map['libc']))
+
+
+def _is_asset_compatible_fallback(asset_name, systype):
+    """Fallback compatibility check for alternative naming schemes."""
+    parsed = _parse_asset_name_fallback(asset_name)
+    if not parsed:
+        return False
+
+    # Python version check
+    version_parts = parsed['python_version'].split('.')
+    major = int(version_parts[0])
+    minor = int(version_parts[1])
+    if major != 3 or minor > 13:
+        return False
+
+    # Simple system compatibility check based on common naming patterns
+    name = asset_name.lower()
+    compatibility_map = {
+        'darwin-x64': ['macos', 'darwin', 'osx', 'x86_64'],
+        'darwin-arm64': ['macos', 'darwin', 'osx', 'arm64', 'aarch64'],
+        'linux-x64': ['linux', 'x86_64', 'amd64'],
+        'linux-arm64': ['linux', 'arm64', 'aarch64'],
+        'linux-armv7l': ['linux', 'armv7', 'arm'],
+        'win32-x64': ['windows', 'win', 'x86_64', 'amd64'],
+        'win32-ia32': ['windows', 'win', 'i686', 'x86'],
+    }
+
+    patterns = compatibility_map.get(systype, [])
+    return any(pattern in name for pattern in patterns)
+
+
+def _score_asset(asset_name, systype):
+    """Score assets to prefer the best build variant."""
+    parsed = _parse_asset_name(asset_name)
+    is_fallback = False
+    
+    # Try fallback parsing if primary parsing fails
+    if not parsed:
+        parsed = _parse_asset_name_fallback(asset_name)
+        is_fallback = True
+    
+    if not parsed:
+        return -1
+
+    # Check compatibility
+    is_compatible = (_is_asset_compatible_fallback(asset_name, systype) if is_fallback 
+                    else _is_asset_compatible(asset_name, systype))
+    
+    if not is_compatible:
+        return -1
+
+    score = 0
+    version_parts = parsed['python_version'].split('.')
+    major = int(version_parts[0])
+    minor = int(version_parts[1])
+    patch = int(version_parts[2])
+
+    # Base score from Python version
+    score += major * 10000 + minor * 100 + patch
+
+    # Prefer primary naming scheme over fallback
+    if is_fallback:
+        score -= 5000  # Penalty for fallback naming
+
+    # Performance optimization bonuses
+    build_variant = parsed['build_variant']
+    package_type = parsed['package_type']
+    
+    if build_variant and any(opt in build_variant for opt in ['pgo', 'lto']):
+        score += 1000  # Highly prefer optimized builds
+    
+    if package_type and 'install' in package_type:
+        score += 500  # Prefer install-only packages
+    
+    if package_type and 'stripped' in package_type:
+        score += 100  # Prefer stripped binaries
+
+    # Slight preference for tar.gz for maximum compatibility
+    if parsed['compression'] == 'tar.gz':
+        score += 10
+
+    return score
+
+
+def _try_get_registry_from_release(release_tag, systype):
+    """Try to get registry file from a specific release tag."""
+    try:
+        # Load release data from astral-sh/python-build-standalone
+        response = requests.get(
+            f'https://api.github.com/repos/astral-sh/python-build-standalone/releases/tags/{release_tag}',
+            timeout=60,
+            headers={
+                'Accept': 'application/vnd.github.v3+json',
+                'User-Agent': 'PlatformIO-Python-Installer',
+            }
+        )
+        response.raise_for_status()
+        release_data = response.json()
+
+        # Cache the release data if this is the first successful request
+        global _cached_release_data, _release_cache_time
+        now = time.time()
+        if not _cached_release_data or (now - _release_cache_time) >= _RELEASE_CACHE_TTL:
+            _cached_release_data = release_data
+            _release_cache_time = now
+        
+        return _select_best_asset(release_data, systype)
+    except Exception as err:
+        log.warning(f"Failed to fetch release {release_tag}: {err}")
+        return None
+
+
+def _select_best_asset(release_data, systype):
+    """Select the best asset for the given system type."""
+    # Filter compatible assets with multiple naming pattern support
+    compatible_assets = []
+    for asset in release_data['assets']:
+        if (_is_asset_compatible(asset['name'], systype) or 
+            _is_asset_compatible_fallback(asset['name'], systype)):
+            compatible_assets.append(asset)
+
+    if not compatible_assets:
+        return None
+
+    # Find asset with highest score
+    best_asset = None
+    best_score = -1
+    
+    for asset in compatible_assets:
+        current_score = _score_asset(asset['name'], systype)
+        if current_score > best_score:
+            best_score = current_score
+            best_asset = asset
+
+    if not best_asset:
+        return None
+
+    # Convert asset to compatible format
+    compression = 'zst' if best_asset['name'].endswith('.tar.zst') else 'gzip'
+    
+    return {
+        'name': best_asset['name'],
+        'download_url': best_asset['browser_download_url'],
+        'size': best_asset['size'],
+        'system': [systype],
+        'compression': compression,
+        'digest': getattr(best_asset, 'digest', None),  # SHA256 checksum from GitHub API
+    }
+
+
+def _get_registry_file():
+    """Fetch portable Python packages from astral-sh/python-build-standalone."""
+    systype = util.get_systype()
+    now = time.time()
+    
+    global _cached_release_data, _release_cache_time
+    
+    # Use cached data if still valid
+    if _cached_release_data and (now - _release_cache_time) < _RELEASE_CACHE_TTL:
+        return _select_best_asset(_cached_release_data, systype)
+    
+    # Try latest release first
+    selected_asset = _try_get_registry_from_release(_get_latest_release_tag(), systype)
+    
+    # If latest release has no compatible assets, fallback to known working release
+    if not selected_asset and _cached_latest_tag != _FALLBACK_RELEASE_TAG:
+        log.warning('No compatible assets in latest release, trying fallback release')
+        selected_asset = _try_get_registry_from_release(_FALLBACK_RELEASE_TAG, systype)
+    
+    return selected_asset
+
+
 def fetch_portable_python(dst):
-    url = get_portable_python_url()
-    if not url:
+    """Download and install portable Python distribution."""
+    log.debug("Starting portable Python installation")
+    
+    registry_file = _get_registry_file()
+    if not registry_file:
         log.debug("Could not find portable Python for %s", util.get_systype())
         return None
+    
+    log.debug("Selected Python package: %s", registry_file['name'])
+    
     try:
-        log.debug("Downloading portable python...")
-
+        # Download the archive
         archive_path = util.download_file(
-            url, os.path.join(os.path.join(dst, ".cache", "tmp"), os.path.basename(url))
+            registry_file['download_url'],
+            os.path.join(dst, ".cache", "tmp", registry_file['name'])
         )
-
+        
+        # Verify integrity if digest is available
+        if registry_file.get('digest') and not _verify_file_integrity(archive_path, registry_file['digest']):
+            log.error("Downloaded file failed SHA256 integrity check")
+            return None
+        
+        # Clean up existing installation
         python_dir = os.path.join(dst, "python3")
         util.safe_remove_dir(python_dir)
         util.safe_create_dir(python_dir, raise_exception=True)
-
+        
+        # Extract archive
         log.debug("Unpacking portable python...")
         util.unpack_archive(archive_path, python_dir)
+        
+        # Return path to Python executable
         if util.IS_WINDOWS:
-            return os.path.join(python_dir, "python.exe")
-        return os.path.join(python_dir, "bin", "python3")
-    except:  # pylint:disable=bare-except
-        log.debug("Could not download portable python")
-    return None
+            python_exe = os.path.join(python_dir, "python.exe")
+        else:
+            python_exe = os.path.join(python_dir, "bin", "python3")
+            
+        # Verify that the executable exists
+        if not os.path.isfile(python_exe):
+            log.error("Python executable does not exist after extraction!")
+            return None
+            
+        log.debug("Python installation completed: %s", python_dir)
+        return python_exe
+        
+    except Exception as err:
+        log.debug("Could not download portable python: %s", err)
+        return None
 
 
 def get_portable_python_url():
-    systype = util.get_systype()
-    result = requests.get(
-        "https://github.com/pioarduino/python-portable/"
-        "releases/download/v3.11.7/python-portable.json",
-        timeout=10,
-    ).json()
-    versions = [
-        version
-        for version in result["versions"]
-        if is_version_system_compatible(version, systype)
-    ]
-    best_version = {}
-    for version in versions:
-        if not best_version or semantic_version.Version(
-            version["name"]
-        ) > semantic_version.Version(best_version["name"]):
-            best_version = version
-    for item in best_version.get("files", []):
-        if systype in item["system"]:
-            return item["download_url"]
-    return None
+    """Compatibility function - now uses the new astral-sh repository."""
+    registry_file = _get_registry_file()
+    return registry_file['download_url'] if registry_file else None
 
 
 def is_version_system_compatible(version, systype):
+    """Check if a version is compatible with the system type."""
     return any(systype in item["system"] for item in version["files"])
 
 
