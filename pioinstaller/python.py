@@ -13,7 +13,6 @@
 # limitations under the License.
 
 import glob
-import hashlib
 import json
 import logging
 import os
@@ -26,7 +25,6 @@ import time
 from functools import lru_cache
 
 import requests
-import semantic_version
 
 from pioinstaller import exception, util
 
@@ -44,8 +42,10 @@ _FALLBACK_RELEASE_TAG = '20250818'
 
 # Pre-compiled regex for better performance
 _ASSET_NAME_REGEX = re.compile(
-    r'^cpython-(\d+\.\d+\.\d+)\+(\d+)-([^-]+)-([^-]+)-([^-]+)(?:-([^-]+))?(?:-([^.]+))?\.(tar\.(?:gz|zst))$'
+    r'^cpython-(\d+\.\d+\.\d+)\+(\d+)-([^-]+)-([^-]+)-([^-]+)'
+    r'(?:-([^-]+))?(?:-([^.]+))?\.(tar\.(?:gz|zst))$'
 )
+
 
 def is_conda():
     return any(
@@ -96,17 +96,19 @@ def is_portable():
 def _get_latest_release_tag():
     """Get the latest release tag from GitHub API with caching."""
     global _cached_latest_tag, _latest_tag_cache_time
-    
+
     now = time.time()
-    
+
     # Use cached tag if still valid
-    if _cached_latest_tag and (now - _latest_tag_cache_time) < _RELEASE_CACHE_TTL:
+    if (_cached_latest_tag and
+            (now - _latest_tag_cache_time) < _RELEASE_CACHE_TTL):
         return _cached_latest_tag
-    
+
     try:
         log.debug('Fetching latest release tag from GitHub')
         response = requests.get(
-            'https://api.github.com/repos/astral-sh/python-build-standalone/releases/latest',
+            'https://api.github.com/repos/astral-sh/'
+            'python-build-standalone/releases/latest',
             timeout=10,
             headers={
                 'Accept': 'application/vnd.github.v3+json',
@@ -114,23 +116,24 @@ def _get_latest_release_tag():
             }
         )
         response.raise_for_status()
-        
+
         latest_release = response.json()
         _cached_latest_tag = latest_release['tag_name']
         _latest_tag_cache_time = now
-        
-        log.debug(f"Using latest release: {_cached_latest_tag}")
+
+        log.debug("Using latest release: %s", _cached_latest_tag)
         return _cached_latest_tag
-    except Exception as err:
+    except Exception:
         # Fallback to known stable release if API fails
-        log.warning(f"Failed to get latest release, using fallback: {_FALLBACK_RELEASE_TAG}")
+        log.warning("Failed to get latest release, using fallback: %s",
+                    _FALLBACK_RELEASE_TAG)
         return _FALLBACK_RELEASE_TAG
 
 
 def _parse_asset_name(asset_name):
     """Parse asset filename to extract metadata."""
     match = _ASSET_NAME_REGEX.match(asset_name)
-    
+
     if not match:
         return None
 
@@ -151,11 +154,15 @@ def _parse_asset_name_fallback(asset_name):
     # Alternative regex patterns for different naming conventions
     fallback_patterns = [
         # Pattern for simplified naming: cpython-3.13.7-linux-x64.tar.gz
-        re.compile(r'^cpython-(\d+\.\d+\.\d+)-([^-]+)-([^.]+)\.(tar\.(?:gz|zst))$'),
-        # Pattern for date-only naming: python-3.13.7-20250818-linux-x64.tar.gz
-        re.compile(r'^python-(\d+\.\d+\.\d+)-(\d+)-([^-]+)-([^.]+)\.(tar\.(?:gz|zst))$'),
+        re.compile(r'^cpython-(\d+\.\d+\.\d+)-([^-]+)-([^.]+)\.'
+                   r'(tar\.(?:gz|zst))$'),
+        # Pattern for date-only naming:
+        # python-3.13.7-20250818-linux-x64.tar.gz
+        re.compile(r'^python-(\d+\.\d+\.\d+)-(\d+)-([^-]+)-([^.]+)\.'
+                   r'(tar\.(?:gz|zst))$'),
         # Generic Python naming: python-3.13.7-linux-x64.tar.gz
-        re.compile(r'^python-(\d+\.\d+\.\d+)-([^-]+)-([^.]+)\.(tar\.(?:gz|zst))$'),
+        re.compile(r'^python-(\d+\.\d+\.\d+)-([^-]+)-([^.]+)\.'
+                   r'(tar\.(?:gz|zst))$'),
     ]
 
     for pattern in fallback_patterns:
@@ -207,8 +214,8 @@ def _is_asset_compatible(asset_name, systype):
 
     # Exclude unwanted build variants
     build_variant = parsed['build_variant']
-    if build_variant and any(variant in build_variant for variant in 
-                           ['freethreaded', 'debug', 'noopt']):
+    if build_variant and any(variant in build_variant for variant in
+                             ['freethreaded', 'debug', 'noopt']):
         return False
 
     # System compatibility mapping
@@ -216,8 +223,8 @@ def _is_asset_compatible(asset_name, systype):
     if not system_map:
         return False
 
-    return (parsed['arch'] == system_map['arch'] and 
-            parsed['os'] == system_map['os'] and 
+    return (parsed['arch'] == system_map['arch'] and
+            parsed['os'] == system_map['os'] and
             parsed['libc'].startswith(system_map['libc']))
 
 
@@ -254,19 +261,20 @@ def _score_asset(asset_name, systype):
     """Score assets to prefer the best build variant."""
     parsed = _parse_asset_name(asset_name)
     is_fallback = False
-    
+
     # Try fallback parsing if primary parsing fails
     if not parsed:
         parsed = _parse_asset_name_fallback(asset_name)
         is_fallback = True
-    
+
     if not parsed:
         return -1
 
     # Check compatibility
-    is_compatible = (_is_asset_compatible_fallback(asset_name, systype) if is_fallback 
-                    else _is_asset_compatible(asset_name, systype))
-    
+    is_compatible = (_is_asset_compatible_fallback(asset_name, systype)
+                     if is_fallback
+                     else _is_asset_compatible(asset_name, systype))
+
     if not is_compatible:
         return -1
 
@@ -286,13 +294,13 @@ def _score_asset(asset_name, systype):
     # Performance optimization bonuses
     build_variant = parsed['build_variant']
     package_type = parsed['package_type']
-    
+
     if build_variant and any(opt in build_variant for opt in ['pgo', 'lto']):
         score += 1000  # Highly prefer optimized builds
-    
+
     if package_type and 'install' in package_type:
         score += 500  # Prefer install-only packages
-    
+
     if package_type and 'stripped' in package_type:
         score += 100  # Prefer stripped binaries
 
@@ -308,7 +316,8 @@ def _try_get_registry_from_release(release_tag, systype):
     try:
         # Load release data from astral-sh/python-build-standalone
         response = requests.get(
-            f'https://api.github.com/repos/astral-sh/python-build-standalone/releases/tags/{release_tag}',
+            f'https://api.github.com/repos/astral-sh/'
+            f'python-build-standalone/releases/tags/{release_tag}',
             timeout=60,
             headers={
                 'Accept': 'application/vnd.github.v3+json',
@@ -321,13 +330,14 @@ def _try_get_registry_from_release(release_tag, systype):
         # Cache the release data if this is the first successful request
         global _cached_release_data, _release_cache_time
         now = time.time()
-        if not _cached_release_data or (now - _release_cache_time) >= _RELEASE_CACHE_TTL:
+        if (not _cached_release_data or
+                (now - _release_cache_time) >= _RELEASE_CACHE_TTL):
             _cached_release_data = release_data
             _release_cache_time = now
-        
+
         return _select_best_asset(release_data, systype)
-    except Exception as err:
-        log.warning(f"Failed to fetch release {release_tag}: {err}")
+    except Exception:
+        log.warning("Failed to fetch release %s", release_tag)
         return None
 
 
@@ -336,8 +346,8 @@ def _select_best_asset(release_data, systype):
     # Filter compatible assets with multiple naming pattern support
     compatible_assets = []
     for asset in release_data['assets']:
-        if (_is_asset_compatible(asset['name'], systype) or 
-            _is_asset_compatible_fallback(asset['name'], systype)):
+        if (_is_asset_compatible(asset['name'], systype) or
+                _is_asset_compatible_fallback(asset['name'], systype)):
             compatible_assets.append(asset)
 
     if not compatible_assets:
@@ -346,7 +356,7 @@ def _select_best_asset(release_data, systype):
     # Find asset with highest score
     best_asset = None
     best_score = -1
-    
+
     for asset in compatible_assets:
         current_score = _score_asset(asset['name'], systype)
         if current_score > best_score:
@@ -357,15 +367,16 @@ def _select_best_asset(release_data, systype):
         return None
 
     # Convert asset to compatible format
-    compression = 'zst' if best_asset['name'].endswith('.tar.zst') else 'gzip'
-    
+    compression = ('zst' if best_asset['name'].endswith('.tar.zst')
+                   else 'gzip')
+
     return {
         'name': best_asset['name'],
         'download_url': best_asset['browser_download_url'],
         'size': best_asset['size'],
         'system': [systype],
         'compression': compression,
-        'digest': getattr(best_asset, 'digest', None),  # SHA256 checksum from GitHub API
+        'digest': getattr(best_asset, 'digest', None),
     }
 
 
@@ -373,35 +384,38 @@ def _get_registry_file():
     """Fetch portable Python packages from astral-sh/python-build-standalone."""
     systype = util.get_systype()
     now = time.time()
-    
-    global _cached_release_data, _release_cache_time
-    
+
     # Use cached data if still valid
-    if _cached_release_data and (now - _release_cache_time) < _RELEASE_CACHE_TTL:
+    if (_cached_release_data and
+            (now - _release_cache_time) < _RELEASE_CACHE_TTL):
         return _select_best_asset(_cached_release_data, systype)
-    
+
     # Try latest release first
-    selected_asset = _try_get_registry_from_release(_get_latest_release_tag(), systype)
-    
-    # If latest release has no compatible assets, fallback to known working release
+    selected_asset = _try_get_registry_from_release(_get_latest_release_tag(),
+                                                    systype)
+
+    # If latest release has no compatible assets, fallback to known working
+    # release
     if not selected_asset and _cached_latest_tag != _FALLBACK_RELEASE_TAG:
-        log.warning('No compatible assets in latest release, trying fallback release')
-        selected_asset = _try_get_registry_from_release(_FALLBACK_RELEASE_TAG, systype)
-    
+        log.warning('No compatible assets in latest release, '
+                    'trying fallback release')
+        selected_asset = _try_get_registry_from_release(_FALLBACK_RELEASE_TAG,
+                                                        systype)
+
     return selected_asset
 
 
 def fetch_portable_python(dst):
     """Download and install portable Python distribution."""
     log.debug("Starting portable Python installation")
-    
+
     registry_file = _get_registry_file()
     if not registry_file:
         log.debug("Could not find portable Python for %s", util.get_systype())
         return None
-    
+
     log.debug("Selected Python package: %s", registry_file['name'])
-    
+
     try:
         # Download the archive
         archive_path = util.download_file(
@@ -410,35 +424,37 @@ def fetch_portable_python(dst):
         )
 
         # Verify integrity if digest is available
-        if registry_file.get('digest') and not util.verify_file_integrity(archive_path, registry_file['digest']):
+        if (registry_file.get('digest') and
+                not util.verify_file_integrity(archive_path,
+                                               registry_file['digest'])):
             log.error("Downloaded file failed SHA256 integrity check")
             return None
-        
+
         # Clean up existing installation
         python_dir = os.path.join(dst, "python3")
         util.safe_remove_dir(python_dir)
         util.safe_create_dir(python_dir, raise_exception=True)
-        
+
         # Extract archive
         log.debug("Unpacking portable python...")
         util.unpack_archive(archive_path, python_dir)
-        
+
         # Return path to Python executable
         if util.IS_WINDOWS:
             python_exe = os.path.join(python_dir, "python.exe")
         else:
             python_exe = os.path.join(python_dir, "bin", "python3")
-            
+
         # Verify that the executable exists
         if not os.path.isfile(python_exe):
             log.error("Python executable does not exist after extraction!")
             return None
-            
+
         log.debug("Python installation completed: %s", python_dir)
         return python_exe
-        
-    except Exception as err:
-        log.debug("Could not download portable python: %s", err)
+
+    except Exception:
+        log.debug("Could not download portable python")
         return None
 
 
@@ -480,7 +496,8 @@ def check():
         return True
 
     # windows check
-    if any(s in util.get_pythonexe_path().lower() for s in ("msys", "mingw", "emacs")):
+    if any(s in util.get_pythonexe_path().lower()
+           for s in ("msys", "mingw", "emacs")):
         raise exception.IncompatiblePythonError(
             "Unsupported environments: msys, mingw, emacs >> %s"
             % util.get_pythonexe_path(),
@@ -528,26 +545,28 @@ def find_compatible_pythons(
 
     if not result and raise_exception:
         # Try to download portable Python before giving up
-        log.debug("No compatible Python found, attempting to download portable Python")
+        log.debug("No compatible Python found, attempting to download "
+                  "portable Python")
         try:
             # Create a temporary directory for portable Python
             with tempfile.TemporaryDirectory() as temp_dir:
                 portable_python = fetch_portable_python(temp_dir)
                 if portable_python and _is_python_compatible(portable_python):
                     log.debug(
-                        "Successfully downloaded and verified portable Python: %s",
-                        portable_python,
+                        "Successfully downloaded and verified portable Python: "
+                        "%s", portable_python,
                     )
                     result.append(portable_python)
                     return result
-        except Exception as e:  # pylint: disable=broad-except
-            log.debug("Failed to download portable Python: %s", e)
+        except Exception:  # pylint: disable=broad-except
+            log.debug("Failed to download portable Python")
 
         # If portable Python download failed, raise the original error
         raise exception.IncompatiblePythonError(
             "Could not find compatible Python 3.10 or above in your system. "
             "Attempted to download portable Python failed. "
-            "Please install the latest official Python 3 and restart installation."
+            "Please install the latest official Python 3 and restart "
+            "installation."
         )
 
     return result
@@ -576,7 +595,8 @@ def _is_python_compatible(python_exe):
         cmd = [
             python_exe,
             "-c",
-            "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')",
+            "import sys; print(f'{sys.version_info.major}."
+            "{sys.version_info.minor}')",
         ]
         output = subprocess.check_output(cmd, stderr=subprocess.STDOUT)
         version_str = output.decode().strip()
@@ -596,7 +616,7 @@ def _is_python_compatible(python_exe):
             log.debug("Error checking Python %s: %s", python_exe, error)
         except UnicodeDecodeError:
             log.debug("Error checking Python %s (decode failed)", python_exe)
-    except Exception as e:  # pylint: disable=broad-except
-        log.debug("Exception checking Python %s: %s", python_exe, e)
+    except Exception:  # pylint: disable=broad-except
+        log.debug("Exception checking Python %s", python_exe)
 
     return False
