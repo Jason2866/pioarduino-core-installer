@@ -91,18 +91,23 @@ def create_wheels(package_dir, dest_dir):
         "zstandard>=0.15.0"
     ], cwd=package_dir)
 
-    # Build project wheel using uv build
-    subprocess.check_call([
-        "uv", "build", "--wheel",
-        "--output", dest_dir
-    ], cwd=package_dir)
+    # Build project wheel using uv build (builds to dist/ by default)
+    subprocess.check_call(["uv", "build", "--wheel"], cwd=package_dir)
+
+    # Copy built wheel from dist/ to destination
+    dist_dir = os.path.join(package_dir, "dist")
+    if os.path.exists(dist_dir):
+        for filename in os.listdir(dist_dir):
+            if filename.endswith('.whl'):
+                src_path = os.path.join(dist_dir, filename)
+                dst_path = os.path.join(dest_dir, filename)
+                shutil.copy2(src_path, dst_path)
 
     # Also create wheels for all dependencies
     subprocess.check_call([
         "uv", "run", "pip", "wheel",
         "--wheel-dir", dest_dir,
         "--only-binary=zstandard",
-        "--find-links", dest_dir,
         "."
     ], cwd=package_dir)
 
