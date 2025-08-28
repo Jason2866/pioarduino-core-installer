@@ -16,6 +16,8 @@ import json
 import os
 import subprocess
 
+import pytest
+
 from pioinstaller import __version__, penv, python, util
 
 
@@ -60,7 +62,7 @@ def test_uv_installed_in_penv(tmpdir):
         # Print UV help output to show that UV is working
         print("\nUV Help Output:")
         print(result.stdout)
-        
+
         # Check that help output contains expected content
         assert "uv" in result.stdout.lower()
         assert "help" in result.stdout.lower() or "usage" in result.stdout.lower()
@@ -68,3 +70,24 @@ def test_uv_installed_in_penv(tmpdir):
         raise AssertionError(f"uv help command failed: {e}")
     except subprocess.TimeoutExpired:
         raise AssertionError("uv help command timed out")
+
+
+@pytest.fixture(scope="module")
+def prepared_penv(tmp_path_factory):
+    penv_dir = tmp_path_factory.mktemp("prepared_penv")
+    penv.create_core_penv(penv_dir=str(penv_dir))
+    return str(penv_dir)
+
+
+def test_uv_help_in_existing_penv(prepared_penv):
+    """Test that uv works in an already existing penv (no creation in this test)."""
+    bin_dir = penv.get_penv_bin_dir(prepared_penv)
+    uv_exe = os.path.join(bin_dir, "uv.exe" if util.IS_WINDOWS else "uv")
+    assert os.path.isfile(uv_exe), f"uv executable not found at {uv_exe}"
+    result = subprocess.run(
+        [uv_exe, "help"], capture_output=True, text=True, check=True, timeout=10
+    )
+    print("\nUV Help Output (existing venv):")
+    print(result.stdout)
+    assert "uv" in result.stdout.lower()
+    assert "help" in result.stdout.lower() or "usage" in result.stdout.lower()
