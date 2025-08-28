@@ -204,13 +204,7 @@ def pack(target):
         with open(template_path, encoding="utf-8") as fptlp:
             content = fptlp.read()
 
-        # Safe template substitution - handles missing variables
-        template_vars = {
-            'zipfile_content': zipdata,
-            'native_extensions_dir': '',
-            'current_ld_path': ''
-        }
-
+        # Simple string replacement to avoid template complexity
         result = content.replace('$zipfile_content', zipdata)
 
         with open(target, "w", encoding="utf-8") as fp:
