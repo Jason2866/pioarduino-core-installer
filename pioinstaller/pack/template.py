@@ -65,8 +65,7 @@ def create_temp_dir():
         os.remove(testscript_path)
         return tmp_dir
     except (AssertionError, NameError):
-        pass
-    return tempfile.mkdtemp()
+        return tempfile.mkdtemp()
 
 
 def extract_native_extensions(pioinstaller_zip, tmp_dir):
@@ -100,14 +99,13 @@ def extract_native_extensions(pioinstaller_zip, tmp_dir):
 
                     try:
                         # Extract to native extensions directory
-                        extracted_path = zip_ref.extract(member,
-                                                        native_extensions_dir)
+                        zip_ref.extract(member, native_extensions_dir)
                         extracted_count += 1
 
                         # Log successful extraction
                         print(f"Extracted native extension: {member}")
 
-                    except Exception as e:
+                    except (OSError, zipfile.BadZipFile) as e:
                         # Continue if individual extraction fails
                         print(f"Warning: Failed to extract {member}: {e}")
                         continue
@@ -137,10 +135,9 @@ def extract_native_extensions(pioinstaller_zip, tmp_dir):
             print(f"Extracted {extracted_count} native extensions successfully")
             return native_extensions_dir
 
-    except Exception as e:
+    except (OSError, zipfile.BadZipFile) as e:
         print(f"Error during native extension extraction: {e}")
         # Continue without native extensions - may cause import errors later
-        pass
 
     return None
 
@@ -178,8 +175,14 @@ def main():
         print("Starting PlatformIO installer...")
         bootstrap()
 
-    except Exception as e:
-        print(f"Error in packed installer: {e}")
+    except KeyboardInterrupt:
+        print("Installation interrupted by user")
+        raise
+    except ImportError as e:
+        print(f"Import error in packed installer: {e}")
+        raise
+    except OSError as e:
+        print(f"File system error in packed installer: {e}")
         raise
 
     finally:
@@ -197,7 +200,7 @@ def main():
                     shutil.rmtree(d)
                 except OSError:
                     # Ignore cleanup errors
-                    pass
+                    continue
 
 
 if __name__ == "__main__":
