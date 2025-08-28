@@ -93,33 +93,6 @@ def is_portable():
     return False
 
 
-def _calculate_file_sha256(filepath):
-    """Calculate SHA256 hash of a file."""
-    hash_sha256 = hashlib.sha256()
-    with open(filepath, "rb") as f:
-        for chunk in iter(lambda: f.read(4096), b""):
-            hash_sha256.update(chunk)
-    return hash_sha256.hexdigest()
-
-
-def _verify_file_integrity(filepath, expected_sha):
-    """Verify file integrity using SHA256 checksum."""
-    try:
-        actual_sha = _calculate_file_sha256(filepath)
-        expected_sha_clean = expected_sha.replace('sha256:', '').lower()
-        actual_sha_clean = actual_sha.lower()
-        
-        if actual_sha_clean == expected_sha_clean:
-            log.debug(f"File integrity verified: {os.path.basename(filepath)}")
-            return True
-        else:
-            log.error(f"File integrity check failed: expected {expected_sha_clean}, got {actual_sha_clean}")
-            return False
-    except Exception as err:
-        log.error(f"SHA256 verification failed: {err}")
-        return False
-
-
 def _get_latest_release_tag():
     """Get the latest release tag from GitHub API with caching."""
     global _cached_latest_tag, _latest_tag_cache_time
@@ -435,9 +408,9 @@ def fetch_portable_python(dst):
             registry_file['download_url'],
             os.path.join(dst, ".cache", "tmp", registry_file['name'])
         )
-        
+
         # Verify integrity if digest is available
-        if registry_file.get('digest') and not _verify_file_integrity(archive_path, registry_file['digest']):
+        if registry_file.get('digest') and not util.verify_file_integrity(archive_path, registry_file['digest']):
             log.error("Downloaded file failed SHA256 integrity check")
             return None
         
