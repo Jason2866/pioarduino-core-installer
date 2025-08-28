@@ -28,6 +28,9 @@ def create_wheels(package_dir, dest_dir):
     # Use uv to install dependencies and pip, then create wheels
     subprocess.call(["uv", "sync"], cwd=package_dir)
     subprocess.call(["uv", "pip", "install", "pip", "wheel"], cwd=package_dir)
+    subprocess.check_call(
+        ["uv", "pip", "install", "zstandard>=0.15.0"], cwd=package_dir
+    )
     subprocess.call(
         ["uv", "run", "pip", "wheel", "--wheel-dir", dest_dir, "."], cwd=package_dir
     )
