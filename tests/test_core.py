@@ -20,7 +20,7 @@ from pioinstaller import __version__, core, penv, util
 
 
 def test_install_pio_core(tmpdir, monkeypatch):
-    core_dir = tmpdir.mkdir(".pio")
+    core_dir = tmpdir.mkdir(".platformio")
     penv_dir = str(core_dir.mkdir("penv"))
     os.environ["PLATFORMIO_CORE_DIR"] = str(core_dir)
 
