@@ -91,11 +91,10 @@ def create_wheels(package_dir, dest_dir):
         "zstandard>=0.15.0"
     ], cwd=package_dir)
 
-    # Build project and dependencies using uv build
+    # Build project wheel using uv build
     subprocess.check_call([
-        "uv", "build",
-        "--wheel-dir", dest_dir,
-        "--no-sources"
+        "uv", "build", "--wheel",
+        "--output", dest_dir
     ], cwd=package_dir)
 
     # Also create wheels for all dependencies
