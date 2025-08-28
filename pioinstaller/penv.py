@@ -187,12 +187,12 @@ def create_core_penv(penv_dir=None, ignore_pythons=None):
         get_penv_bin_dir(penv_dir), "python.exe" if util.IS_WINDOWS else "python"
     )
     init_state(python_exe, penv_dir)
-    click.echo("Virtual environment has been successfully created!")
+    click.echo("Virtual environment has been successfully created with uv installed!")
     return result_dir
 
 
 def create_venv_with_uv(uv_exe, python_exe, penv_dir):
-    """Create virtual environment using uv."""
+    """Create virtual environment using uv and install uv into the venv."""
     log.debug("Using uv with %s Python for virtual environment.", python_exe)
 
     # Remove existing directory if it exists
@@ -210,6 +210,10 @@ def create_venv_with_uv(uv_exe, python_exe, penv_dir):
         )
         if os.path.isfile(expected_python):
             log.debug("Successfully created venv at %s", penv_dir)
+            
+            # Install uv into the venv using system uv
+            install_uv_in_venv_with_system_uv(uv_exe, penv_dir)
+            
             return penv_dir
 
         log.debug("Expected python not found at %s", expected_python)
@@ -221,6 +225,28 @@ def create_venv_with_uv(uv_exe, python_exe, penv_dir):
     except Exception as e:  # pylint: disable=broad-exception-caught
         log.debug("Error creating venv with uv: %s", str(e))
         return None
+
+
+def install_uv_in_venv_with_system_uv(system_uv_exe, penv_dir):
+    """
+    Use the system uv executable to install uv inside the penv venv.
+    """
+    penv_bin_dir = get_penv_bin_dir(penv_dir)
+    penv_python_exe = os.path.join(
+        penv_bin_dir, "python.exe" if util.IS_WINDOWS else "python"
+    )
+
+    cmd = [system_uv_exe, "pip", "--python", penv_python_exe, "install", "uv"]
+    log.debug("Using system uv to install uv in venv: %s", " ".join(cmd))
+    
+    try:
+        subprocess.check_call(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        log.debug("Successfully installed uv in venv")
+    except subprocess.CalledProcessError as e:
+        log.debug("Failed to install uv in venv: %s", str(e))
+        raise exception.PIOInstallerException(
+            "Could not install uv in penv"
+        )
 
 
 def init_state(python_exe, penv_dir):
