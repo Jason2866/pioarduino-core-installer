@@ -48,6 +48,7 @@ _ASSET_NAME_REGEX = re.compile(
 
 
 def is_conda():
+    """Check if current Python is running in a conda environment."""
     return any(
         [
             os.path.exists(os.path.join(sys.prefix, "conda-meta")),
@@ -66,7 +67,7 @@ def is_portable():
     try:
         __import__("winpython")
         return True
-    except:  # pylint:disable=bare-except
+    except ImportError:  # pylint:disable=bare-except
         pass
 
     if _is_python_compatible(sys.executable):
@@ -95,6 +96,7 @@ def is_portable():
 
 def _get_latest_release_tag():
     """Get the latest release tag from GitHub API with caching."""
+    # pylint: disable=global-statement
     global _cached_latest_tag, _latest_tag_cache_time
 
     now = time.time()
@@ -123,7 +125,9 @@ def _get_latest_release_tag():
 
         log.debug("Using latest release: %s", _cached_latest_tag)
         return _cached_latest_tag
-    except Exception:
+    except (requests.exceptions.RequestException,
+            requests.exceptions.JSONDecodeError,
+            KeyError, ValueError):
         # Fallback to known stable release if API fails
         log.warning("Failed to get latest release, using fallback: %s",
                     _FALLBACK_RELEASE_TAG)
@@ -328,6 +332,7 @@ def _try_get_registry_from_release(release_tag, systype):
         release_data = response.json()
 
         # Cache the release data if this is the first successful request
+        # pylint: disable=global-statement
         global _cached_release_data, _release_cache_time
         now = time.time()
         if (not _cached_release_data or
@@ -336,7 +341,9 @@ def _try_get_registry_from_release(release_tag, systype):
             _release_cache_time = now
 
         return _select_best_asset(release_data, systype)
-    except Exception:
+    except (requests.exceptions.RequestException,
+            requests.exceptions.JSONDecodeError,
+            KeyError, ValueError):
         log.warning("Failed to fetch release %s", release_tag)
         return None
 
@@ -453,8 +460,8 @@ def fetch_portable_python(dst):
         log.debug("Python installation completed: %s", python_dir)
         return python_exe
 
-    except Exception:
-        log.debug("Could not download portable python")
+    except (OSError, PermissionError) as exc:
+        log.debug("Could not download portable python: %s", exc)
         return None
 
 
@@ -470,6 +477,7 @@ def is_version_system_compatible(version, systype):
 
 
 def check():
+    """Check if current Python environment is compatible."""
     # platform check
     if sys.platform == "cygwin":
         raise exception.IncompatiblePythonError("Unsupported Cygwin platform")
@@ -505,10 +513,10 @@ def check():
 
     try:
         assert os.path.isdir(os.path.join(sys.prefix, "Scripts"))
-    except AssertionError:
+    except AssertionError as exc:
         raise exception.IncompatiblePythonError(
             "Unsupported python without 'Scripts' folder"
-        )
+        ) from exc
 
     return True
 
@@ -558,7 +566,7 @@ def find_compatible_pythons(
                     )
                     result.append(portable_python)
                     return result
-        except Exception:  # pylint: disable=broad-except
+        except (OSError, PermissionError, subprocess.CalledProcessError):
             log.debug("Failed to download portable Python")
 
         # If portable Python download failed, raise the original error
@@ -616,7 +624,7 @@ def _is_python_compatible(python_exe):
             log.debug("Error checking Python %s: %s", python_exe, error)
         except UnicodeDecodeError:
             log.debug("Error checking Python %s (decode failed)", python_exe)
-    except Exception:  # pylint: disable=broad-except
+    except (OSError, ValueError):
         log.debug("Exception checking Python %s", python_exe)
 
     return False
