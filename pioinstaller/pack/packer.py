@@ -218,20 +218,29 @@ def pack(target):
         log.info("Successfully bundled wheels: %s", len(wheels_list))
         log.debug("Bundled wheels: %s", wheels_list)
 
-        # Write packed script with all template variables
+        # Read template and safely substitute variables
         template_path = os.path.join(util.get_source_dir(), "pack",
                                    "template.py")
 
-        # Provide all template variables to avoid KeyError
+        with open(template_path, encoding="utf-8") as fptlp:
+            content = fptlp.read()
+
+        # Use safe substitution to avoid KeyError for missing placeholders
+        from string import Template
+        template = Template(content)
+        
+        # Provide all known template variables
         template_vars = {
             'zipfile_content': zipdata,
-            'native_extensions_dir': ''  # Not used in current template
+            'native_extensions_dir': '',
+            'current_ld_path': ''
         }
+        
+        # Use safe_substitute to ignore undefined placeholders
+        result = template.safe_substitute(template_vars)
 
         with open(target, "w", encoding="utf-8") as fp:
-            with open(template_path, encoding="utf-8") as fptlp:
-                content = fptlp.read()
-                fp.write(content.format(**template_vars))
+            fp.write(result)
 
         # Make script executable
         oldmode = os.stat(target).st_mode & 0o7777
