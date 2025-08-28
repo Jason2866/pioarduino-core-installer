@@ -71,7 +71,10 @@ def create_temp_dir():
 
 def extract_native_extensions(pioinstaller_zip, tmp_dir):
     """
-    Extract native extensions (.so, .pyd, .dll) to filesystem for loading.
+    Extract native extensions (.so, .pyd, .dll) to filesystem BEFORE import.
+
+    This is CRITICAL: Python cannot import native extensions from ZIP archives.
+    We must extract them to real filesystem first.
 
     Args:
         pioinstaller_zip (str): Path to the ZIP file containing dependencies.
@@ -89,24 +92,31 @@ def extract_native_extensions(pioinstaller_zip, tmp_dir):
     try:
         with zipfile.ZipFile(pioinstaller_zip, 'r') as zip_ref:
             for member in zip_ref.namelist():
-                # Check if this is a native extension file
-                if (member.endswith(('.so', '.pyd', '.dll')) or
+                # Extract ALL native extension files
+                if (member.endswith(('.so', '.pyd', '.dll', '.dylib')) or
                     '/backend_c.' in member or
-                        '_cffi.' in member):
+                    '_cffi.' in member or
+                    'backend_cffi.py' in member):
 
-                    # Extract to native extensions directory
                     try:
-                        zip_ref.extract(member, native_extensions_dir)
+                        # Extract to native extensions directory
+                        extracted_path = zip_ref.extract(member,
+                                                        native_extensions_dir)
                         extracted_count += 1
-                    except Exception:  # pylint: disable=broad-except
+
+                        # Log successful extraction
+                        print(f"Extracted native extension: {member}")
+
+                    except Exception as e:
                         # Continue if individual extraction fails
+                        print(f"Warning: Failed to extract {member}: {e}")
                         continue
 
         if extracted_count > 0:
-            # Add the native extensions directory to Python path
+            # CRITICAL: Add native extensions dir to Python path FIRST
             sys.path.insert(0, native_extensions_dir)
 
-            # Also set LD_LIBRARY_PATH for Linux shared libraries
+            # Set LD_LIBRARY_PATH for Linux shared libraries
             current_ld_path = os.environ.get('LD_LIBRARY_PATH', '')
             if current_ld_path:
                 os.environ['LD_LIBRARY_PATH'] = (
@@ -115,11 +125,24 @@ def extract_native_extensions(pioinstaller_zip, tmp_dir):
             else:
                 os.environ['LD_LIBRARY_PATH'] = native_extensions_dir
 
-    except Exception:  # pylint: disable=broad-except
-        # If extraction fails completely, continue without native extensions
+            # Set PATH for Windows DLLs
+            current_path = os.environ.get('PATH', '')
+            if current_path:
+                os.environ['PATH'] = (
+                    f"{native_extensions_dir};{current_path}"
+                )
+            else:
+                os.environ['PATH'] = native_extensions_dir
+
+            print(f"Extracted {extracted_count} native extensions successfully")
+            return native_extensions_dir
+
+    except Exception as e:
+        print(f"Error during native extension extraction: {e}")
+        # Continue without native extensions - may cause import errors later
         pass
 
-    return native_extensions_dir if extracted_count > 0 else None
+    return None
 
 
 def bootstrap():
@@ -138,18 +161,27 @@ def main():
     pioinstaller_zip = None
 
     try:
+        # Create ZIP file from embedded base64 data
         pioinstaller_zip = os.path.join(tmp_dir, "pioinstaller.zip")
         with open(pioinstaller_zip, "wb") as fp:
-            # Use safe base64 decode with padding correction
             fp.write(decode_base64_padded(DEPENDENCIES))
 
-        # Extract native extensions before adding zip to sys.path
+        # CRITICAL: Extract native extensions BEFORE adding ZIP to sys.path
+        # This MUST happen before any imports that need native extensions
+        print("Extracting native extensions...")
         native_dir = extract_native_extensions(pioinstaller_zip, tmp_dir)
 
-        # Add the main zip to sys.path for Python modules
+        # Only now add the main ZIP to sys.path for Python modules
         sys.path.insert(0, pioinstaller_zip)
 
+        # Now safe to import and run - native extensions are on filesystem
+        print("Starting PlatformIO installer...")
         bootstrap()
+
+    except Exception as e:
+        print(f"Error in packed installer: {e}")
+        raise
+
     finally:
         # Cleanup: Remove from sys.path and delete temporary directories
         if pioinstaller_zip and pioinstaller_zip in sys.path:
@@ -158,9 +190,14 @@ def main():
         if native_dir and native_dir in sys.path:
             sys.path.remove(native_dir)
 
+        # Clean up temporary directories
         for d in (runtime_tmp_dir, tmp_dir):
             if d and os.path.isdir(d):
-                shutil.rmtree(d, ignore_errors=True)
+                try:
+                    shutil.rmtree(d)
+                except OSError:
+                    # Ignore cleanup errors
+                    pass
 
 
 if __name__ == "__main__":
