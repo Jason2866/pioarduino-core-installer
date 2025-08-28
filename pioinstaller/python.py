@@ -61,25 +61,35 @@ def is_conda():
 
 
 def is_portable():
+    """Check if current Python is portable or compatible (3.10-3.13)."""
+    # Check for WinPython first
     try:
         __import__("winpython")
         return True
     except:  # pylint:disable=bare-except
         pass
-    
+
+    if _is_python_compatible(sys.executable):
+        log.debug("Current Python executable is compatible: %s", sys.executable)
+        return True
+
     print(os.path.normpath(sys.executable))
     python_dir = os.path.dirname(sys.executable)
     if not util.IS_WINDOWS:
         # skip "bin" folder
         python_dir = os.path.dirname(python_dir)
+
+    # Check for portable Python manifest
     manifest_path = os.path.join(python_dir, "package.json")
     if not os.path.isfile(manifest_path):
         return False
+
     try:
         with open(manifest_path, encoding='utf-8') as fp:
             return json.load(fp).get("name") == "python-portable"
     except (ValueError, UnicodeDecodeError):
         pass
+
     return False
 
 
