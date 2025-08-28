@@ -60,7 +60,7 @@ def _validate_zstandard_wheel(wheel_dir):
                         f"zstandard wheel {filename} missing backend files. "
                         "This will cause ModuleNotFoundError at runtime."
                     )
-                
+
                 log.info("zstandard wheel %s contains backend files: %s",
                        filename, backend_files[:5])
 
