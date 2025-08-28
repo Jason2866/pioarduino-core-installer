@@ -288,8 +288,24 @@ def _score_asset(asset_name, systype):
     minor = int(version_parts[1])
     patch = int(version_parts[2])
 
-    # Base score from Python version
-    score += major * 10000 + minor * 100 + patch
+    # Version priority scoring with explicit preferences
+    # Python 3.13 gets the highest base score
+    if major == 3:
+        if minor == 13:
+            score += 50000  # Highest priority for 3.13
+        elif minor == 12:
+            score += 40000  # Second priority for 3.12
+        elif minor == 11:
+            score += 30000  # Third priority for 3.11
+        elif minor == 10:
+            score += 20000  # Fourth priority for 3.10
+        else:
+            score += major * 10000 + minor * 100  # Fallback for other versions
+    else:
+        score += major * 10000 + minor * 100  # Non-Python 3 versions
+
+    # Add patch version bonus (small increment)
+    score += patch
 
     # Prefer primary naming scheme over fallback
     if is_fallback:
