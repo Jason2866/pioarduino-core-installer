@@ -15,6 +15,7 @@
 # pylint:disable=bad-option-value,import-outside-toplevel
 
 import os
+import re
 import shutil
 import sys
 import tempfile
@@ -22,8 +23,31 @@ import zipfile
 from base64 import b64decode
 
 DEPENDENCIES = b"""
-{zipfile_content}
+$zipfile_content
 """
+
+
+def decode_base64_padded(data):
+    """
+    Safely decode base64 data with automatic padding correction.
+    
+    Args:
+        data (bytes): Base64 encoded data.
+        
+    Returns:
+        bytes: Decoded binary data.
+    """
+    import base64
+    
+    # Clean non-base64 characters
+    data = re.sub(rb'[^A-Za-z0-9+/=]', b'', data)
+    
+    # Add missing padding
+    missing_padding = len(data) % 4
+    if missing_padding:
+        data += b'=' * (4 - missing_padding)
+    
+    return base64.b64decode(data)
 
 
 def create_temp_dir():
@@ -49,9 +73,6 @@ def create_temp_dir():
 def extract_native_extensions(pioinstaller_zip, tmp_dir):
     """
     Extract native extensions (.so, .pyd, .dll) to filesystem for loading.
-
-    Python cannot import native extensions directly from ZIP archives,
-    so we need to extract them to a temporary directory first.
 
     Args:
         pioinstaller_zip (str): Path to the ZIP file containing dependencies.
@@ -84,7 +105,6 @@ def extract_native_extensions(pioinstaller_zip, tmp_dir):
 
         if extracted_count > 0:
             # Add the native extensions directory to Python path
-            # This allows Python to find the extracted .so/.pyd files
             sys.path.insert(0, native_extensions_dir)
 
             # Also set LD_LIBRARY_PATH for Linux shared libraries
@@ -99,7 +119,6 @@ def extract_native_extensions(pioinstaller_zip, tmp_dir):
 
     except Exception:  # pylint: disable=broad-except
         # If extraction fails completely, continue without native extensions
-        # This allows pure Python functionality to work
         pass
 
     return native_extensions_dir if extracted_count > 0 else None
@@ -123,7 +142,8 @@ def main():
     try:
         pioinstaller_zip = os.path.join(tmp_dir, "pioinstaller.zip")
         with open(pioinstaller_zip, "wb") as fp:
-            fp.write(b64decode(DEPENDENCIES))
+            # Use safe base64 decode with padding correction
+            fp.write(decode_base64_padded(DEPENDENCIES))
 
         # Extract native extensions before adding zip to sys.path
         native_dir = extract_native_extensions(pioinstaller_zip, tmp_dir)
