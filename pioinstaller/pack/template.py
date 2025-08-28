@@ -68,6 +68,73 @@ def create_temp_dir():
         return tempfile.mkdtemp()
 
 
+def _is_native_extension(member_name):
+    """Check if file is a native extension that needs extraction."""
+    return (member_name.endswith(('.so', '.pyd', '.dll', '.dylib')) or
+            '/backend_c.' in member_name or
+            '_cffi.' in member_name or
+            'backend_cffi.py' in member_name)
+
+
+def _extract_single_member(zip_ref, member, native_extensions_dir):
+    """Extract a single member from zip archive."""
+    try:
+        zip_ref.extract(member, native_extensions_dir)
+        print(f"Extracted native extension: {member}")
+        return True
+    except (OSError, zipfile.BadZipFile) as e:
+        print(f"Warning: Failed to extract {member}: {e}")
+        return False
+
+
+def _create_direct_access_link(member, native_extensions_dir):
+    """Create direct access link for zstandard files."""
+    if 'zstandard/' not in member:
+        return
+
+    source_path = os.path.join(native_extensions_dir, member)
+    direct_path = os.path.join(native_extensions_dir,
+                             os.path.basename(member))
+
+    if os.path.exists(direct_path):
+        return
+
+    try:
+        os.symlink(source_path, direct_path)
+    except OSError:
+        # Fallback: Copy file if symlink fails
+        shutil.copy2(source_path, direct_path)
+
+
+def _setup_environment_paths(native_extensions_dir):
+    """Setup environment variables for native extension loading."""
+    # Add to sys.path
+    sys.path.insert(0, native_extensions_dir)
+
+    # Add zstandard subdirectory if exists
+    zstandard_dir = os.path.join(native_extensions_dir, "zstandard")
+    if os.path.exists(zstandard_dir):
+        sys.path.insert(0, zstandard_dir)
+
+    # Setup LD_LIBRARY_PATH for Linux
+    current_ld_path = os.environ.get('LD_LIBRARY_PATH', '')
+    if current_ld_path:
+        new_ld_path = f"{native_extensions_dir}:{zstandard_dir}:{current_ld_path}"
+    else:
+        new_ld_path = f"{native_extensions_dir}:{zstandard_dir}"
+    os.environ['LD_LIBRARY_PATH'] = new_ld_path
+
+    # Setup PATH for Windows
+    current_path = os.environ.get('PATH', '')
+    if current_path:
+        new_path = f"{native_extensions_dir};{zstandard_dir};{current_path}"
+    else:
+        new_path = f"{native_extensions_dir};{zstandard_dir}"
+    os.environ['PATH'] = new_path
+
+    print(f"Added paths: {native_extensions_dir}, {zstandard_dir}")
+
+
 def extract_native_extensions(pioinstaller_zip, tmp_dir):
     """
     Extract native extensions (.so, .pyd, .dll) to filesystem BEFORE import.
@@ -91,62 +158,19 @@ def extract_native_extensions(pioinstaller_zip, tmp_dir):
     try:
         with zipfile.ZipFile(pioinstaller_zip, 'r') as zip_ref:
             for member in zip_ref.namelist():
-                # Extract ALL native extension files
-                if (member.endswith(('.so', '.pyd', '.dll', '.dylib')) or
-                    '/backend_c.' in member or
-                    '_cffi.' in member or
-                    'backend_cffi.py' in member):
+                if not _is_native_extension(member):
+                    continue
 
-                    try:
-                        # KRITISCH: Extrahiere mit korrekter Verzeichnisstruktur
-                        zip_ref.extract(member, native_extensions_dir)
-                        extracted_count += 1
-                        print(f"Extracted native extension: {member}")
-
-                        # ZUSÄTZLICH: Erstelle symbolische Links für direkte Auffindung
-                        if 'zstandard/' in member:
-                            # Erstelle auch direkten Zugriff auf zstandard Dateien
-                            source_path = os.path.join(native_extensions_dir,
-                                                     member)
-                            direct_path = os.path.join(native_extensions_dir,
-                                                     os.path.basename(member))
-                            try:
-                                if not os.path.exists(direct_path):
-                                    os.symlink(source_path, direct_path)
-                            except OSError:
-                                # Fallback: Kopiere Datei wenn symlink fehlschlägt
-                                shutil.copy2(source_path, direct_path)
-
-                    except (OSError, zipfile.BadZipFile) as e:
-                        print(f"Warning: Failed to extract {member}: {e}")
-                        continue
+                # Extract with correct directory structure
+                if _extract_single_member(zip_ref, member,
+                                        native_extensions_dir):
+                    extracted_count += 1
+                    # Create direct access links for zstandard files
+                    _create_direct_access_link(member, native_extensions_dir)
 
         if extracted_count > 0:
-            # KRITISCH: Mehrere Pfade hinzufügen
-            sys.path.insert(0, native_extensions_dir)
-
-            # Auch zstandard Unterverzeichnis hinzufügen
-            zstandard_dir = os.path.join(native_extensions_dir, "zstandard")
-            if os.path.exists(zstandard_dir):
-                sys.path.insert(0, zstandard_dir)
-
-            # Umgebungsvariablen setzen
-            current_ld_path = os.environ.get('LD_LIBRARY_PATH', '')
-            if current_ld_path:
-                new_ld_path = f"{native_extensions_dir}:{zstandard_dir}:{current_ld_path}"
-            else:
-                new_ld_path = f"{native_extensions_dir}:{zstandard_dir}"
-            os.environ['LD_LIBRARY_PATH'] = new_ld_path
-
-            current_path = os.environ.get('PATH', '')
-            if current_path:
-                new_path = f"{native_extensions_dir};{zstandard_dir};{current_path}"
-            else:
-                new_path = f"{native_extensions_dir};{zstandard_dir}"
-            os.environ['PATH'] = new_path
-
+            _setup_environment_paths(native_extensions_dir)
             print(f"Extracted {extracted_count} native extensions successfully")
-            print(f"Added paths: {native_extensions_dir}, {zstandard_dir}")
             return native_extensions_dir
 
     except (OSError, zipfile.BadZipFile) as e:
@@ -177,7 +201,6 @@ def main():
             fp.write(decode_base64_padded(DEPENDENCIES))
 
         # CRITICAL: Extract native extensions BEFORE adding ZIP to sys.path
-        # This MUST happen before any imports that need native extensions
         print("Extracting native extensions...")
         native_dir = extract_native_extensions(pioinstaller_zip, tmp_dir)
 
