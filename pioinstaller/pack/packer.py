@@ -16,7 +16,7 @@
 Package creation utilities for PlatformIO installer.
 
 This module provides functionality to create a standalone installer script
-with all dependencies bundled as wheels.
+with all dependencies bundled as wheels, optimized for uv-managed projects.
 """
 
 import base64
@@ -34,41 +34,99 @@ from pioinstaller import util
 log = logging.getLogger(__name__)
 
 
+def _validate_zstandard_wheel(wheel_dir):
+    """
+    Validate that zstandard wheel contains required backend files.
+
+    Args:
+        wheel_dir (str): Directory containing wheel files.
+
+    Raises:
+        RuntimeError: If zstandard wheel is incomplete.
+    """
+    for filename in os.listdir(wheel_dir):
+        if 'zstandard' in filename.lower() and filename.endswith('.whl'):
+            filepath = os.path.join(wheel_dir, filename)
+            with zipfile.ZipFile(filepath) as whl:
+                files = whl.namelist()
+                backend_files = [f for f in files if
+                               ('backend' in f or '.so' in f or '.pyd' in f)]
+
+                if not backend_files:
+                    log.error("zstandard wheel %s missing backend files",
+                             filename)
+                    log.error("Available files: %s", files[:10])
+                    raise RuntimeError(
+                        f"zstandard wheel {filename} missing backend files. "
+                        "This will cause ModuleNotFoundError at runtime."
+                    )
+                else:
+                    log.info("zstandard wheel %s contains backend files: %s",
+                           filename, backend_files[:5])
+
+
 def create_wheels(package_dir, dest_dir):
     """
-    Create wheels for all Python package dependencies.
+    Create wheels using uv for all Python package dependencies.
 
     Args:
         package_dir (str): Directory containing the package source.
         dest_dir (str): Directory to store generated wheel files.
+
+    Raises:
+        subprocess.CalledProcessError: If wheel creation fails.
+        RuntimeError: If zstandard wheel is incomplete.
     """
+    # Synchronize dependencies using uv
     subprocess.check_call(["uv", "sync"], cwd=package_dir)
+
+    # Install build tools in uv environment
     subprocess.check_call(["uv", "pip", "install", "pip", "wheel"],
                          cwd=package_dir)
 
-    # Explicitly install zstandard to ensure inclusion
-    subprocess.check_call(["uv", "pip", "install", "zstandard>=0.15.0"],
-                         cwd=package_dir)
+    # Install zstandard with explicit binary wheel preference
+    subprocess.check_call([
+        "uv", "pip", "install",
+        "--only-binary=zstandard",
+        "zstandard>=0.15.0"
+    ], cwd=package_dir)
 
-    # Create wheels for all dependencies
-    subprocess.check_call(
-        ["uv", "run", "pip", "wheel", "--wheel-dir", dest_dir, "."],
-        cwd=package_dir
-    )
+    # Build project and dependencies using uv build
+    subprocess.check_call([
+        "uv", "build",
+        "--wheel-dir", dest_dir,
+        "--no-sources"
+    ], cwd=package_dir)
+
+    # Also create wheels for all dependencies
+    subprocess.check_call([
+        "uv", "run", "pip", "wheel",
+        "--wheel-dir", dest_dir,
+        "--only-binary=zstandard",
+        "--find-links", dest_dir,
+        "."
+    ], cwd=package_dir)
+
+    # Validate that zstandard wheel contains backend files
+    _validate_zstandard_wheel(dest_dir)
 
 
 def _process_wheel_files(tmp_dir):
     """
-    Process wheel files and create bundled zip data.
+    Process wheel files and create bundled zip data with complete inclusion.
 
     Args:
         tmp_dir (str): Directory containing wheel files.
 
     Returns:
         tuple: (encoded_zip_data, wheel_names_list)
+
+    Raises:
+        RuntimeError: If critical backend files are missing.
     """
     new_data = io.BytesIO()
     wheels_found = []
+    zstandard_backend_found = False
 
     for filename in os.listdir(tmp_dir):
         if not filename.endswith(".whl"):
@@ -77,17 +135,41 @@ def _process_wheel_files(tmp_dir):
         filepath = os.path.join(tmp_dir, filename)
 
         with zipfile.ZipFile(filepath) as existing_zip:
+            # Check if this is zstandard wheel and validate backend files
+            if 'zstandard' in filename.lower():
+                backend_files = [f for f in existing_zip.namelist()
+                               if ('backend' in f or '.so' in f or
+                                   '.pyd' in f)]
+                if backend_files:
+                    zstandard_backend_found = True
+                    log.info("Found zstandard backend files: %s",
+                           backend_files[:3])
+                else:
+                    log.warning("No backend files in zstandard wheel: %s",
+                              filename)
+
             with zipfile.ZipFile(new_data, mode="a") as new_zip:
                 for zinfo in existing_zip.infolist():
-                    # Keep metadata for packages that need it
-                    if re.search(r"\.dist-info/(METADATA|PKG-INFO)$",
-                               zinfo.filename):
+                    # Include ALL files for zstandard (especially .so/.pyd)
+                    if 'zstandard' in filepath.lower():
+                        new_zip.writestr(zinfo, existing_zip.read(zinfo))
+                    # Keep metadata for other packages
+                    elif re.search(r"\.dist-info/(METADATA|PKG-INFO)$",
+                                 zinfo.filename):
                         new_zip.writestr(zinfo, existing_zip.read(zinfo))
                     elif not re.search(r"\.dist-info/", zinfo.filename):
                         new_zip.writestr(zinfo, existing_zip.read(zinfo))
 
-    # Verify critical dependencies are included
-    critical_deps = ['zstandard', 'requests']
+    # Verify zstandard backend was found and included
+    if not zstandard_backend_found:
+        raise RuntimeError(
+            "zstandard backend files not found in wheels. "
+            "This will cause ModuleNotFoundError at runtime. "
+            f"Available wheels: {wheels_found}"
+        )
+
+    # Verify other critical dependencies
+    critical_deps = ['requests']
     for dep in critical_deps:
         if not any(dep.lower() in wheel.lower() for wheel in wheels_found):
             log.warning("Dependency %s not found in wheels: %s",
@@ -99,7 +181,7 @@ def _process_wheel_files(tmp_dir):
 
 def pack(target):
     """
-    Create a packed installer script with all dependencies bundled.
+    Create a packed installer script with all dependencies bundled using uv.
 
     Args:
         target (str): Target path for the packed script. Can be a directory
@@ -107,6 +189,11 @@ def pack(target):
 
     Returns:
         str: Path to the created packed script.
+
+    Raises:
+        AssertionError: If target is not a string.
+        RuntimeError: If critical dependencies are missing.
+        OSError: If file operations fail.
     """
     assert isinstance(target, str)
 
@@ -118,22 +205,35 @@ def pack(target):
     tmp_dir = tempfile.mkdtemp()
 
     try:
+        # Create wheels using uv with validation
         create_wheels(os.path.dirname(util.get_source_dir()), tmp_dir)
-        zipdata, _ = _process_wheel_files(tmp_dir)
 
+        # Process wheels and create bundled data
+        zipdata, wheels_list = _process_wheel_files(tmp_dir)
+
+        log.info("Successfully bundled wheels: %s", len(wheels_list))
+        log.debug("Bundled wheels: %s", wheels_list)
+
+        # Write packed script
         template_path = os.path.join(util.get_source_dir(), "pack",
                                    "template.py")
         with open(target, "w", encoding="utf-8") as fp:
             with open(template_path, encoding="utf-8") as fptlp:
-                fp.write(fptlp.read().format(zipfile_content=zipdata))
+                content = fptlp.read()
+                fp.write(content.format(zipfile_content=zipdata))
 
-        # Ensure the permissions on the newly created file
+        # Make script executable
         oldmode = os.stat(target).st_mode & 0o7777
         newmode = (oldmode | 0o555) & 0o7777
         os.chmod(target, newmode)
 
+        log.info("Successfully created packed installer: %s", target)
         return target
 
     finally:
         # Clean up temporary directory
-        shutil.rmtree(tmp_dir)
+        try:
+            shutil.rmtree(tmp_dir)
+        except OSError as e:
+            log.warning("Failed to clean up temporary directory %s: %s",
+                       tmp_dir, e)
