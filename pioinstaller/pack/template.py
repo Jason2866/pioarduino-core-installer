@@ -20,7 +20,6 @@ import shutil
 import sys
 import tempfile
 import zipfile
-from base64 import b64decode
 
 DEPENDENCIES = b"""
 $zipfile_content
@@ -30,23 +29,23 @@ $zipfile_content
 def decode_base64_padded(data):
     """
     Safely decode base64 data with automatic padding correction.
-    
+
     Args:
         data (bytes): Base64 encoded data.
-        
+
     Returns:
         bytes: Decoded binary data.
     """
     import base64
-    
+
     # Clean non-base64 characters
     data = re.sub(rb'[^A-Za-z0-9+/=]', b'', data)
-    
+
     # Add missing padding
     missing_padding = len(data) % 4
     if missing_padding:
         data += b'=' * (4 - missing_padding)
-    
+
     return base64.b64decode(data)
 
 
@@ -108,14 +107,13 @@ def extract_native_extensions(pioinstaller_zip, tmp_dir):
             sys.path.insert(0, native_extensions_dir)
 
             # Also set LD_LIBRARY_PATH for Linux shared libraries
-            if hasattr(os, 'environ'):
-                current_ld_path = os.environ.get('LD_LIBRARY_PATH', '')
-                if current_ld_path:
-                    os.environ['LD_LIBRARY_PATH'] = (
-                        f"{native_extensions_dir}:{current_ld_path}"
-                    )
-                else:
-                    os.environ['LD_LIBRARY_PATH'] = native_extensions_dir
+            current_ld_path = os.environ.get('LD_LIBRARY_PATH', '')
+            if current_ld_path:
+                os.environ['LD_LIBRARY_PATH'] = (
+                    f"{native_extensions_dir}:{current_ld_path}"
+                )
+            else:
+                os.environ['LD_LIBRARY_PATH'] = native_extensions_dir
 
     except Exception:  # pylint: disable=broad-except
         # If extraction fails completely, continue without native extensions
