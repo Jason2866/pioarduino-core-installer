@@ -20,7 +20,6 @@ import shutil
 import subprocess
 import tempfile
 import zipfile
-import zstandard as zstd
 
 from pioinstaller import util
 
