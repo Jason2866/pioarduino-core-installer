@@ -28,7 +28,6 @@ import shutil
 import subprocess
 import tempfile
 import zipfile
-from string import Template
 
 from pioinstaller import util
 
@@ -58,8 +57,7 @@ def _validate_zstandard_wheel(wheel_dir):
                              filename)
                     log.error("Available files: %s", files[:10])
                     raise RuntimeError(
-                        f"zstandard wheel {filename} missing backend files. "
-                        "This will cause ModuleNotFoundError at runtime."
+                        "zstandard wheel missing backend files"
                     )
 
                 log.info("zstandard wheel %s contains backend files: %s",
@@ -78,24 +76,16 @@ def create_wheels(package_dir, dest_dir):
         subprocess.CalledProcessError: If wheel creation fails.
         RuntimeError: If zstandard wheel is incomplete.
     """
-    # Synchronize dependencies using uv
     subprocess.check_call(["uv", "sync"], cwd=package_dir)
-
-    # Install build tools in uv environment
     subprocess.check_call(["uv", "pip", "install", "pip", "wheel"],
                          cwd=package_dir)
-
-    # Install zstandard with explicit binary wheel preference
     subprocess.check_call([
         "uv", "pip", "install",
         "--only-binary=zstandard",
         "zstandard>=0.15.0"
     ], cwd=package_dir)
-
-    # Build project wheel using uv build (builds to dist/ by default)
     subprocess.check_call(["uv", "build", "--wheel"], cwd=package_dir)
 
-    # Copy built wheel from dist/ to destination
     dist_dir = os.path.join(package_dir, "dist")
     if os.path.exists(dist_dir):
         for filename in os.listdir(dist_dir):
@@ -104,7 +94,6 @@ def create_wheels(package_dir, dest_dir):
                 dst_path = os.path.join(dest_dir, filename)
                 shutil.copy2(src_path, dst_path)
 
-    # Also create wheels for all dependencies
     subprocess.check_call([
         "uv", "run", "pip", "wheel",
         "--wheel-dir", dest_dir,
@@ -112,7 +101,6 @@ def create_wheels(package_dir, dest_dir):
         "."
     ], cwd=package_dir)
 
-    # Validate that zstandard wheel contains backend files
     _validate_zstandard_wheel(dest_dir)
 
 
@@ -140,7 +128,6 @@ def _process_wheel_files(tmp_dir):
         filepath = os.path.join(tmp_dir, filename)
 
         with zipfile.ZipFile(filepath) as existing_zip:
-            # Check if this is zstandard wheel and validate backend files
             if 'zstandard' in filename.lower():
                 backend_files = [f for f in existing_zip.namelist()
                                if ('backend' in f or '.so' in f or
@@ -155,25 +142,17 @@ def _process_wheel_files(tmp_dir):
 
             with zipfile.ZipFile(new_data, mode="a") as new_zip:
                 for zinfo in existing_zip.infolist():
-                    # Include ALL files for zstandard (especially .so/.pyd)
                     if 'zstandard' in filepath.lower():
                         new_zip.writestr(zinfo, existing_zip.read(zinfo))
-                    # Keep metadata for other packages
                     elif re.search(r"\.dist-info/(METADATA|PKG-INFO)$",
                                  zinfo.filename):
                         new_zip.writestr(zinfo, existing_zip.read(zinfo))
                     elif not re.search(r"\.dist-info/", zinfo.filename):
                         new_zip.writestr(zinfo, existing_zip.read(zinfo))
 
-    # Verify zstandard backend was found and included
     if not zstandard_backend_found:
-        raise RuntimeError(
-            "zstandard backend files not found in wheels. "
-            "This will cause ModuleNotFoundError at runtime. "
-            f"Available wheels: {wheels_found}"
-        )
+        raise RuntimeError("zstandard backend files not found")
 
-    # Verify other critical dependencies
     critical_deps = ['requests']
     for dep in critical_deps:
         if not any(dep.lower() in wheel.lower() for wheel in wheels_found):
@@ -189,16 +168,10 @@ def pack(target):
     Create a packed installer script with all dependencies bundled using uv.
 
     Args:
-        target (str): Target path for the packed script. Can be a directory
-                     or a file path.
+        target (str): Target path for the packed script.
 
     Returns:
         str: Path to the created packed script.
-
-    Raises:
-        AssertionError: If target is not a string.
-        RuntimeError: If critical dependencies are missing.
-        OSError: If file operations fail.
     """
     assert isinstance(target, str)
 
@@ -210,39 +183,20 @@ def pack(target):
     tmp_dir = tempfile.mkdtemp()
 
     try:
-        # Create wheels using uv with validation
         create_wheels(os.path.dirname(util.get_source_dir()), tmp_dir)
-
-        # Process wheels and create bundled data
         zipdata, wheels_list = _process_wheel_files(tmp_dir)
 
         log.info("Successfully bundled wheels: %s", len(wheels_list))
-        log.debug("Bundled wheels: %s", wheels_list)
 
-        # Read template and safely substitute variables
         template_path = os.path.join(util.get_source_dir(), "pack",
                                    "template.py")
 
         with open(template_path, encoding="utf-8") as fptlp:
             content = fptlp.read()
 
-        # Use safe substitution to avoid KeyError for missing placeholders
-        template = Template(content)
-
-        # Provide all known template variables
-        template_vars = {
-            'zipfile_content': zipdata,
-            'native_extensions_dir': '',
-            'current_ld_path': ''
-        }
-
-        # Use safe_substitute to ignore undefined placeholders
-        result = template.safe_substitute(template_vars)
-
         with open(target, "w", encoding="utf-8") as fp:
-            fp.write(result)
+            fp.write(content.format(zipfile_content=zipdata))
 
-        # Make script executable
         oldmode = os.stat(target).st_mode & 0o7777
         newmode = (oldmode | 0o555) & 0o7777
         os.chmod(target, newmode)
@@ -251,8 +205,8 @@ def pack(target):
         return target
 
     finally:
-        # Clean up temporary directory
         try:
             shutil.rmtree(tmp_dir)
         except OSError as e:
-            log.warning("Failed to clean up temporary directory %
+            log.warning("Failed to clean up temporary directory %s: %s",
+                       tmp_dir, e)
