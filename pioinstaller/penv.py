@@ -185,7 +185,10 @@ def create_core_penv(penv_dir=None, ignore_pythons=None):
         get_penv_bin_dir(penv_dir), "python.exe" if util.IS_WINDOWS else "python"
     )
     init_state(python_exe, penv_dir)
-    click.echo("Virtual environment has been successfully created with uv installed at %s!" % penv_dir)
+    click.echo(
+        "Virtual environment has been successfully created with uv installed at %s!"
+        % penv_dir
+    )
     return result_dir
 
 
