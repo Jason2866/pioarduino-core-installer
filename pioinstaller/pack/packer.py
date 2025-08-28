@@ -12,8 +12,16 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+"""
+Package creation utilities for PlatformIO installer.
+
+This module provides functionality to create a standalone installer script
+with all dependencies bundled as wheels.
+"""
+
 import base64
 import io
+import logging
 import os
 import re
 import shutil
@@ -23,21 +31,43 @@ import zipfile
 
 from pioinstaller import util
 
+log = logging.getLogger(__name__)
+
 
 def create_wheels(package_dir, dest_dir):
-    # Use uv to install dependencies and pip, then create wheels
-    subprocess.call(["uv", "sync"], cwd=package_dir)
-    subprocess.call(["uv", "pip", "install", "pip", "wheel"], cwd=package_dir)
+    """
+    Create wheels for all Python package dependencies.
+    
+    Args:
+        package_dir (str): Directory containing the package source.
+        dest_dir (str): Directory to store generated wheel files.
+    """
+    subprocess.check_call(["uv", "sync"], cwd=package_dir)
+    subprocess.check_call(["uv", "pip", "install", "pip", "wheel"], 
+                         cwd=package_dir)
+    
+    # Explicitly install zstandard to ensure inclusion
+    subprocess.check_call(["uv", "pip", "install", "zstandard>=0.15.0"], 
+                         cwd=package_dir)
+    
+    # Create wheels for all dependencies
     subprocess.check_call(
-        ["uv", "pip", "install", "zstandard>=0.15.0"], cwd=package_dir
-    )
-    subprocess.call(
-        ["uv", "run", "pip", "wheel", "--wheel-dir", dest_dir, "."], cwd=package_dir
+        ["uv", "run", "pip", "wheel", "--wheel-dir", dest_dir, "."], 
+        cwd=package_dir
     )
 
 
 def pack(target):
-    """Create a packed installer script with all dependencies."""
+    """
+    Create a packed installer script with all dependencies bundled.
+    
+    Args:
+        target (str): Target path for the packed script. Can be a directory
+                     or a file path.
+    
+    Returns:
+        str: Path to the created packed script.
+    """
     assert isinstance(target, str)
 
     if os.path.isdir(target):
@@ -72,14 +102,17 @@ def pack(target):
         # Verify critical dependencies are included
         critical_deps = ['zstandard', 'requests']
         for dep in critical_deps:
-            if not any(dep.lower() in wheel.lower() for wheel in wheels_found):
-                print(f"Warning: {dep} dependency not found in wheels: {wheels_found}")
+            if not any(dep.lower() in wheel.lower() 
+                      for wheel in wheels_found):
+                log.warning("Dependency %s not found in wheels: %s", 
+                           dep, wheels_found)
         
         zipdata = base64.b64encode(new_data.getvalue()).decode("utf8")
         
-        with open(target, "w") as fp:
-            template_path = os.path.join(util.get_source_dir(), "pack", "template.py")
-            with open(template_path) as fptlp:
+        template_path = os.path.join(util.get_source_dir(), "pack", 
+                                   "template.py")
+        with open(target, "w", encoding="utf-8") as fp:
+            with open(template_path, encoding="utf-8") as fptlp:
                 fp.write(fptlp.read().format(zipfile_content=zipdata))
 
         # Ensure the permissions on the newly created file
@@ -90,5 +123,5 @@ def pack(target):
         return target
         
     finally:
-        # Clearing up
+        # Clean up temporary directory
         shutil.rmtree(tmp_dir)
