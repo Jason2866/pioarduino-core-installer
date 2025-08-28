@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import hashlib
 import io
 import logging
 import os
@@ -22,6 +23,7 @@ import stat
 import subprocess
 import sys
 import tarfile
+import tempfile
 
 import requests
 
@@ -94,14 +96,45 @@ def safe_create_dir(path, raise_exception=False):
     return None
 
 
+def calculate_file_sha256(filepath):
+    """Calculate SHA256 hash of a file."""
+    hash_sha256 = hashlib.sha256()
+    with open(filepath, "rb") as f:
+        for chunk in iter(lambda: f.read(4096), b""):
+            hash_sha256.update(chunk)
+    return hash_sha256.hexdigest()
+
+
+def verify_file_integrity(filepath, expected_sha):
+    """Verify file integrity using SHA256 checksum."""
+    try:
+        actual_sha = calculate_file_sha256(filepath)
+        expected_sha_clean = expected_sha.replace('sha256:', '').lower()
+        actual_sha_clean = actual_sha.lower()
+        
+        if actual_sha_clean == expected_sha_clean:
+            log.debug(f"File integrity verified: {os.path.basename(filepath)}")
+            return True
+        else:
+            log.error(f"File integrity check failed: expected {expected_sha_clean}, got {actual_sha_clean}")
+            return False
+    except Exception as err:
+        log.error(f"SHA256 verification failed: {err}")
+        return False
+
+
 def download_file(url, dst, cache=True):
     if cache:
-        content_length = requests.head(url, timeout=10).headers.get("Content-Length")
-        if os.path.isfile(dst) and content_length == os.path.getsize(dst):
-            log.debug("Getting from cache: %s", dst)
-            return dst
+        try:
+            content_length = requests.head(url, timeout=10).headers.get("Content-Length")
+            if os.path.isfile(dst) and content_length and int(content_length) == os.path.getsize(dst):
+                log.debug("Getting from cache: %s", dst)
+                return dst
+        except (requests.RequestException, ValueError):
+            pass  # Continue with download if cache check fails
 
-    resp = requests.get(url, stream=True, timeout=10)
+    resp = requests.get(url, stream=True, timeout=60)
+    resp.raise_for_status()
     itercontent = resp.iter_content(chunk_size=io.DEFAULT_BUFFER_SIZE)
     safe_create_dir(os.path.dirname(dst))
     with open(dst, "wb") as fp:
@@ -110,11 +143,81 @@ def download_file(url, dst, cache=True):
     return dst
 
 
+def extract_tar_gz(source, destination):
+    """Extract gzip compressed tar archive."""
+    with tarfile.open(source, 'r:gz') as tar:
+        # Use data filter for security (Python 3.12+)
+        if hasattr(tarfile, 'data_filter'):
+            tar.extractall(path=destination, filter='data')
+        else:
+            tar.extractall(path=destination)
+    return destination
+
+
+def extract_tar_zst(source, destination):
+    """Extract zstandard compressed tar archive."""
+    try:
+        # Try zstandard library first
+        import zstandard as zstd
+        
+        with open(source, 'rb') as compressed_file:
+            dctx = zstd.ZstdDecompressor()
+            with dctx.stream_reader(compressed_file) as reader:
+                with tarfile.open(fileobj=reader, mode='r|') as tar:
+                    # Use data filter for security (Python 3.12+)
+                    if hasattr(tarfile, 'data_filter'):
+                        tar.extractall(path=destination, filter='data')
+                    else:
+                        tar.extractall(path=destination)
+        
+        return destination
+    except ImportError:
+        # Fallback: Try using pyzstd if available
+        try:
+            import pyzstd
+            
+            with open(source, 'rb') as f:
+                compressed_data = f.read()
+            
+            decompressed_data = pyzstd.decompress(compressed_data)
+            
+            # Create temporary file for tar extraction
+            with tempfile.NamedTemporaryFile() as temp_file:
+                temp_file.write(decompressed_data)
+                temp_file.flush()
+                
+                with tarfile.open(temp_file.name, 'r') as tar:
+                    # Use data filter for security (Python 3.12+)
+                    if hasattr(tarfile, 'data_filter'):
+                        tar.extractall(path=destination, filter='data')
+                    else:
+                        tar.extractall(path=destination)
+            
+            return destination
+        except ImportError:
+            raise ImportError(
+                "No zstandard decompression library available. "
+                "Install 'zstandard' or 'pyzstd': pip install zstandard"
+            )
+
+
 def unpack_archive(src, dst):
-    assert src.endswith("tar.gz")
-    with tarfile.open(src, mode="r:gz") as fp:
-        fp.extractall(dst)
-    return dst
+    """
+    Extract archive with automatic format detection.
+    Supports .tar.gz and .tar.zst formats.
+    """
+    filename = os.path.basename(src)
+    
+    if filename.endswith('.tar.zst'):
+        return extract_tar_zst(src, dst)
+    elif filename.endswith('.tar.gz'):
+        return extract_tar_gz(src, dst)
+    else:
+        # Fallback for legacy support
+        if src.endswith("tar.gz"):
+            return extract_tar_gz(src, dst)
+        else:
+            raise ValueError(f"Unsupported archive format: {filename}")
 
 
 def get_installer_script():
@@ -122,11 +225,40 @@ def get_installer_script():
 
 
 def get_systype():
-    type_ = platform.system().lower()
-    arch = platform.machine().lower()
-    if type_ == "windows":
-        arch = "amd64" if platform.architecture()[0] == "64bit" else "x86"
-    return "%s_%s" % (type_, arch) if arch else type_
+    """
+    Get system type compatible with astral-sh python-build-standalone naming.
+    Returns format like: darwin-x64, linux-x64, win32-x64, etc.
+    """
+    system = platform.system().lower()
+    machine = platform.machine().lower()
+    
+    # Normalize system names
+    if system == "windows":
+        system = "win32"
+    elif system == "darwin":
+        system = "darwin"
+    elif system == "linux":
+        system = "linux"
+    
+    # Normalize architecture names
+    if machine in ("x86_64", "amd64"):
+        arch = "x64"
+    elif machine in ("i386", "i686", "x86"):
+        arch = "ia32" if system == "win32" else "x86"
+    elif machine in ("arm64", "aarch64"):
+        arch = "arm64"
+    elif machine.startswith("armv7"):
+        arch = "armv7l"
+    elif machine.startswith("arm"):
+        arch = "arm"
+    else:
+        arch = machine
+    
+    # Handle Windows architecture detection
+    if system == "win32":
+        arch = "x64" if platform.architecture()[0] == "64bit" else "ia32"
+    
+    return f"{system}-{arch}"
 
 
 def safe_remove_dir(path, raise_exception=False):
