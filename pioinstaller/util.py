@@ -32,6 +32,7 @@ import sys
 import tarfile
 
 import requests
+import zstandard as zstd
 
 # Platform detection constants
 IS_WINDOWS = sys.platform.lower().startswith("win")
@@ -290,15 +291,9 @@ def extract_tar_zst(source, destination):
     Returns:
         str: Path to destination directory.
 
-    Raises:
-        ImportError: If zstandard library is not available.
-
     Note:
-        Requires 'zstandard' package to be installed.
         Uses streaming decompression for memory efficiency.
     """
-    import zstandard as zstd
-
     with open(source, 'rb') as compressed_file:
         dctx = zstd.ZstdDecompressor()
         with dctx.stream_reader(compressed_file) as reader:
