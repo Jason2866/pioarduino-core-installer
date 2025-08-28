@@ -28,6 +28,7 @@ import shutil
 import subprocess
 import tempfile
 import zipfile
+from string import Template
 
 from pioinstaller import util
 
@@ -226,16 +227,15 @@ def pack(target):
             content = fptlp.read()
 
         # Use safe substitution to avoid KeyError for missing placeholders
-        from string import Template
         template = Template(content)
-        
+
         # Provide all known template variables
         template_vars = {
             'zipfile_content': zipdata,
             'native_extensions_dir': '',
             'current_ld_path': ''
         }
-        
+
         # Use safe_substitute to ignore undefined placeholders
         result = template.safe_substitute(template_vars)
 
@@ -255,5 +255,4 @@ def pack(target):
         try:
             shutil.rmtree(tmp_dir)
         except OSError as e:
-            log.warning("Failed to clean up temporary directory %s: %s",
-                       tmp_dir, e)
+            log.warning("Failed to clean up temporary directory %
