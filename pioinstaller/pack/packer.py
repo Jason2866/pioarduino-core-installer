@@ -218,13 +218,20 @@ def pack(target):
         log.info("Successfully bundled wheels: %s", len(wheels_list))
         log.debug("Bundled wheels: %s", wheels_list)
 
-        # Write packed script
+        # Write packed script with all template variables
         template_path = os.path.join(util.get_source_dir(), "pack",
                                    "template.py")
+
+        # Provide all template variables to avoid KeyError
+        template_vars = {
+            'zipfile_content': zipdata,
+            'native_extensions_dir': ''  # Not used in current template
+        }
+
         with open(target, "w", encoding="utf-8") as fp:
             with open(template_path, encoding="utf-8") as fptlp:
                 content = fptlp.read()
-                fp.write(content.format(zipfile_content=zipdata))
+                fp.write(content.format(**template_vars))
 
         # Make script executable
         oldmode = os.stat(target).st_mode & 0o7777
