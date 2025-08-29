@@ -20,6 +20,7 @@ import shutil
 import subprocess
 import tarfile
 import time
+import zipfile
 
 import click
 import requests
@@ -57,12 +58,41 @@ def get_uv_platform():
     # Detect musl on Linux
     if system == "Linux" and plat and "-unknown-linux-gnu" in plat:
         try:
-            out = subprocess.check_output(["ldd", "--version"], stderr=subprocess.STDOUT)
+            out = subprocess.check_output(
+                ["ldd", "--version"], stderr=subprocess.STDOUT
+            )
             if b"musl" in out:
                 plat = plat.replace("-unknown-linux-gnu", "-unknown-linux-musl")
-        except Exception:
+        except subprocess.CalledProcessError:
             pass
     return plat
+
+
+def _extract_uv_archive(archive_path, extract_dir):
+    """Extract uv archive to extract_dir and check for unsafe paths."""
+    if util.IS_WINDOWS:
+        with zipfile.ZipFile(archive_path) as zf:
+            for m in zf.infolist():
+                dest = os.path.abspath(os.path.join(extract_dir, m.filename))
+                if not dest.startswith(os.path.abspath(extract_dir) + os.sep):
+                    raise exception.PIOInstallerException("Unsafe path in archive")
+            zf.extractall(extract_dir)
+    else:
+        with tarfile.open(archive_path, "r:*") as tar:
+            for m in tar.getmembers():
+                dest = os.path.abspath(os.path.join(extract_dir, m.name))
+                if not dest.startswith(os.path.abspath(extract_dir) + os.sep):
+                    raise exception.PIOInstallerException("Unsafe path in archive")
+            tar.extractall(extract_dir)
+
+
+def _find_uv_binary(extract_dir):
+    """Find the uv binary in the extracted files."""
+    for root, _, files in os.walk(extract_dir):
+        for file in files:
+            if file in ("uv", "uv.exe"):
+                return os.path.join(root, file)
+    return None
 
 
 def download_and_install_uv(cache_dir):
@@ -82,56 +112,28 @@ def download_and_install_uv(cache_dir):
 
     try:
         util.download_file(uv_url, uv_archive_path)
-
-        # Extract uv binary (zip on Windows, tar.* elsewhere) into a temporary directory
         extract_dir = os.path.join(tmp_dir, "uv-extract")
         util.safe_remove_dir(extract_dir)
         os.makedirs(extract_dir, exist_ok=True)
-        if util.IS_WINDOWS:
-            import zipfile
-            with zipfile.ZipFile(uv_archive_path) as zf:
-                for m in zf.infolist():
-                    dest = os.path.abspath(os.path.join(extract_dir, m.filename))
-                    if not dest.startswith(os.path.abspath(extract_dir) + os.sep):
-                        raise exception.PIOInstallerException("Unsafe path in archive")
-                zf.extractall(extract_dir)
-        else:
-            with tarfile.open(uv_archive_path, "r:*") as tar:
-                for m in tar.getmembers():
-                    dest = os.path.abspath(os.path.join(extract_dir, m.name))
-                    if not dest.startswith(os.path.abspath(extract_dir) + os.sep):
-                        raise exception.PIOInstallerException("Unsafe path in archive")
-                tar.extractall(extract_dir)
-
-        # Find the uv binary in the extracted files (both Windows and Unix)
-        uv_binary = None
-        for root, _, files in os.walk(extract_dir):
-            for file in files:
-                if file in ("uv", "uv.exe"):
-                    uv_binary = os.path.join(root, file)
-                    break
-            if uv_binary:
-                break
-
+        _extract_uv_archive(uv_archive_path, extract_dir)
+        uv_binary = _find_uv_binary(extract_dir)
         if not uv_binary:
             raise exception.PIOInstallerException(
                 "Could not find uv binary in downloaded archive"
             )
-
-        # Copy uv to cache directory
-        uv_dest = os.path.join(
-            cache_dir, "uv" + (".exe" if util.IS_WINDOWS else "")
-        )
+        uv_dest = os.path.join(cache_dir, "uv" + (".exe" if util.IS_WINDOWS else ""))
         shutil.copy2(uv_binary, uv_dest)
-
-        # Make executable on Unix systems
         if not util.IS_WINDOWS:
             os.chmod(uv_dest, 0o755)
-
         log.debug("uv installed at %s", uv_dest)
         return uv_dest
-
-    except (requests.RequestException, tarfile.TarError, OSError, exception.PIOInstallerException) as e:
+    except (
+        requests.RequestException,
+        tarfile.TarError,
+        zipfile.BadZipFile,
+        OSError,
+        exception.PIOInstallerException,
+    ) as e:
         log.debug("Could not download or install uv: %s", str(e))
         return None
 
@@ -210,10 +212,7 @@ def create_core_penv(penv_dir=None, ignore_pythons=None):
         get_penv_bin_dir(penv_dir), "python.exe" if util.IS_WINDOWS else "python"
     )
     init_state(python_exe, penv_dir)
-    click.echo(
-        "Virtual environment has been successfully created at %s!"
-        % penv_dir
-    )
+    click.echo("Virtual environment has been successfully created at %s!" % penv_dir)
     return result_dir
 
 
@@ -265,7 +264,11 @@ def install_uv_in_venv_with_system_uv(system_uv_exe, penv_dir):
 
     try:
         subprocess.run(
-            cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT, env=env
+            cmd,
+            check=True,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.STDOUT,
+            env=env,
         )
         log.debug("Successfully installed uv in venv")
     except subprocess.CalledProcessError as e:

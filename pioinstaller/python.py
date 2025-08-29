@@ -32,13 +32,16 @@ def is_conda():
     Check if the current Python interpreter is running inside a Conda environment.
     Returns True if Conda is detected, otherwise False.
     """
-    return any([
-        os.path.exists(os.path.join(sys.prefix, "conda-meta")),
-        "anaconda" in sys.executable.lower(),
-        "miniconda" in sys.executable.lower(),
-        "continuum analytics" in sys.version.lower(),
-        "conda" in sys.version.lower(),
-    ])
+    return any(
+        [
+            os.path.exists(os.path.join(sys.prefix, "conda-meta")),
+            "anaconda" in sys.executable.lower(),
+            "miniconda" in sys.executable.lower(),
+            "continuum analytics" in sys.version.lower(),
+            "conda" in sys.version.lower(),
+        ]
+    )
+
 
 def is_portable():
     """
@@ -67,12 +70,13 @@ def is_portable():
         return False
 
     try:
-        with open(manifest_path, encoding='utf-8') as fp:
+        with open(manifest_path, encoding="utf-8") as fp:
             return json.load(fp).get("name") == "python-portable"
     except (ValueError, UnicodeDecodeError):
         pass
 
     return False
+
 
 def fetch_portable_python(_dst):
     """
@@ -101,6 +105,7 @@ def fetch_portable_python(_dst):
         log.debug("Could not install Python 3.13 using uv: %s", exc)
         return None
 
+
 def get_portable_python_url():
     """
     Compatibility stub, not needed anymore with uv.
@@ -108,11 +113,13 @@ def get_portable_python_url():
     """
     return None
 
+
 def is_version_system_compatible(_version, _systype):
     """
     Compatibility check. Always returns True since uv handles compatibility.
     """
     return True
+
 
 def check():
     """
@@ -128,8 +135,7 @@ def check():
     if sys.version_info < (3, 10) or sys.version_info >= (3, 14):
         raise exception.IncompatiblePythonError(
             "Unsupported Python version: %s. "
-            "Supported Python versions are 3.10 to 3.13."
-            % platform.python_version(),
+            "Supported Python versions are 3.10 to 3.13." % platform.python_version(),
         )
 
     # Conda environments are not supported
@@ -146,8 +152,7 @@ def check():
         return True
 
     # Windows environment check for unsupported environments
-    if any(s in util.get_pythonexe_path().lower()
-           for s in ("msys", "mingw", "emacs")):
+    if any(s in util.get_pythonexe_path().lower() for s in ("msys", "mingw", "emacs")):
         raise exception.IncompatiblePythonError(
             "Unsupported environments: msys, mingw, emacs >> %s"
             % util.get_pythonexe_path(),
@@ -161,6 +166,7 @@ def check():
         ) from exc
 
     return True
+
 
 def find_compatible_pythons(ignore_pythons=None, raise_exception=True):
     """
@@ -196,12 +202,16 @@ def find_compatible_pythons(ignore_pythons=None, raise_exception=True):
 
     if not result and raise_exception:
         # Try to install Python 3.13 using uv
-        log.debug("No compatible Python 3.10-3.13 found, attempting to install "
-                  "Python 3.13 using uv")
+        log.debug(
+            "No compatible Python 3.10-3.13 found, attempting to install "
+            "Python 3.13 using uv"
+        )
         try:
             python_exe = fetch_portable_python(None)
             if python_exe and _is_python_compatible(python_exe):
-                log.debug("Successfully installed and verified Python 3.13: %s", python_exe)
+                log.debug(
+                    "Successfully installed and verified Python 3.13: %s", python_exe
+                )
                 result.append(python_exe)
                 return result
         except (subprocess.CalledProcessError, FileNotFoundError, OSError) as exc:
@@ -216,6 +226,7 @@ def find_compatible_pythons(ignore_pythons=None, raise_exception=True):
         )
 
     return result
+
 
 def _get_python_candidates(exenames):
     """
@@ -236,6 +247,7 @@ def _get_python_candidates(exenames):
     candidates.insert(0, sys.executable)
     return candidates
 
+
 def _is_python_compatible(python_exe):
     """
     Determine if the specified Python executable is compatible (version 3.10 - 3.13).
@@ -252,7 +264,7 @@ def _is_python_compatible(python_exe):
         version_str = output.decode().strip()
 
         # Match Python version 3.10, 3.11, 3.12, or 3.13
-        if re.match(r'^3\.(10|11|12|13)$', version_str):
+        if re.match(r"^3\.(10|11|12|13)$", version_str):
             log.debug("Found compatible Python %s: %s", python_exe, version_str)
             return True
 

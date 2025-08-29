@@ -1,0 +1,47 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "lint",
+			"type": "shell",
+			"command": "make lint",
+			"isBackground": false,
+			"group": "test"
+		},
+		{
+			"label": "lint",
+			"type": "shell",
+			"command": "make lint",
+			"isBackground": false,
+			"group": "test"
+		},
+		{
+			"label": "lint",
+			"type": "shell",
+			"command": "make lint",
+			"isBackground": false,
+			"group": "test"
+		},
+		{
+			"label": "lint",
+			"type": "shell",
+			"command": "make lint",
+			"isBackground": false,
+			"group": "test"
+		},
+		{
+			"label": "lint",
+			"type": "shell",
+			"command": "make lint",
+			"isBackground": false,
+			"group": "test"
+		},
+		{
+			"label": "lint",
+			"type": "shell",
+			"command": "make lint",
+			"isBackground": false,
+			"group": "test"
+		}
+	]
+}

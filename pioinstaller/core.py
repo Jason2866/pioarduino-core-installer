@@ -29,35 +29,38 @@ from pioinstaller import __version__, exception, home, util
 
 log = logging.getLogger(__name__)
 
-PIO_CORE_API_URL = "https://api.github.com/repos/pioarduino/platformio-core/releases/latest"
-PIO_CORE_DEVELOP_URL = "https://github.com/pioarduino/platformio-core/archive/pioarduino.zip"
+PIO_CORE_API_URL = (
+    "https://api.github.com/repos/pioarduino/platformio-core/releases/latest"
+)
+PIO_CORE_DEVELOP_URL = (
+    "https://github.com/pioarduino/platformio-core/archive/pioarduino.zip"
+)
 
 _CACHED_RELEASE_URL = None
 
+
 def _get_release_url():
     """Resolve latest release zip URL lazily with fallback and cache."""
-    global _CACHED_RELEASE_URL
-    if _CACHED_RELEASE_URL:
-        return _CACHED_RELEASE_URL
+    # pylint: disable=protected-access
+    if hasattr(_get_release_url, "_cache"):
+        return _get_release_url._cache
     try:
-        # Lazy import to avoid hard dependency at import time
         import requests  # noqa: WPS433
 
         resp = requests.get(PIO_CORE_API_URL, timeout=5)
         resp.raise_for_status()
         tag_name = resp.json().get("tag_name")
         if tag_name:
-            _CACHED_RELEASE_URL = (
-                f"https://github.com/pioarduino/platformio-core/archive/refs/tags/{tag_name}.zip"
-            )
+            url = f"https://github.com/pioarduino/platformio-core/archive/refs/tags/{tag_name}.zip"
         else:
             raise KeyError("tag_name missing")
-    except Exception as exc:  # noqa: BLE001
+    except (requests.RequestException, KeyError) as exc:
         log.debug("Falling back to pinned core URL due to: %s", exc)
-        _CACHED_RELEASE_URL = (
-            "https://github.com/pioarduino/platformio-core/archive/refs/tags/v6.1.18.zip"
-        )
-    return _CACHED_RELEASE_URL
+        url = "https://github.com/pioarduino/platformio-core/archive/refs/tags/v6.1.18.zip"
+    # pylint: disable=protected-access
+    _get_release_url._cache = url
+    return url
+
 
 UPDATE_INTERVAL = 60 * 60 * 24 * 31  # 31 days
 
@@ -386,10 +389,12 @@ def auto_upgrade_core(platformio_exe, develop=False):
             stderr=subprocess.PIPE,
         )
         return True
-    except Exception as e:  # pylint:disable=broad-except
-        raise exception.PIOInstallerException(
-            "Could not upgrade pioarduino Core: %s" % str(e)
+    except subprocess.CalledProcessError as e:
+        msg = (
+            "Could not upgrade pioarduino Core: "
+            f"{e.output.decode(errors='ignore') if hasattr(e, 'output') else str(e)}"
         )
+        raise exception.PIOInstallerException(msg)
     return False
 
 
