@@ -28,24 +28,27 @@ log = logging.getLogger(__name__)
 
 
 def is_conda():
-    """Check if current Python is running in a conda environment."""
+    """
+    Check if the current Python interpreter is running inside a Conda environment.
+    Returns True if Conda is detected, otherwise False.
+    """
     return any([
         os.path.exists(os.path.join(sys.prefix, "conda-meta")),
-        # (os.getenv("CONDA_PREFIX") or os.getenv("CONDA_DEFAULT_ENV")),
         "anaconda" in sys.executable.lower(),
         "miniconda" in sys.executable.lower(),
         "continuum analytics" in sys.version.lower(),
         "conda" in sys.version.lower(),
     ])
 
-
 def is_portable():
-    """Check if current Python is compatible (3.10-3.13)."""
-    # Check for WinPython first
+    """
+    Check if the current Python is portable and compatible (3.10-3.13).
+    Returns True if compatible (including WinPython), otherwise False.
+    """
     try:
         __import__("winpython")
         return True
-    except ImportError:  # pylint:disable=bare-except
+    except ImportError:
         pass
 
     if _is_python_compatible(sys.executable):
@@ -55,10 +58,10 @@ def is_portable():
     print(os.path.normpath(sys.executable))
     python_dir = os.path.dirname(sys.executable)
     if not util.IS_WINDOWS:
-        # skip "bin" folder
+        # skip "bin" folder for non-Windows platforms
         python_dir = os.path.dirname(python_dir)
 
-    # Check for Python manifest
+    # Check for Python manifest file
     manifest_path = os.path.join(python_dir, "package.json")
     if not os.path.isfile(manifest_path):
         return False
@@ -71,50 +74,57 @@ def is_portable():
 
     return False
 
-
-def fetch_portable_python(dst):
-    """Install Python 3.13 using uv."""
+def fetch_portable_python(_dst):
+    """
+    Attempt to install Python 3.13 using uv and return the path to the new executable.
+    Returns path string if successful, otherwise None.
+    """
     log.debug("Installing Python 3.13 using uv")
-    
     try:
-        # Use uv to install Python 3.13
+        # Install Python 3.13 via uv
         cmd = ["uv", "python", "install", "3.13"]
         subprocess.check_call(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        
+
         # Find the installed Python 3.13 executable
         cmd = ["uv", "python", "find", "3.13"]
         result = subprocess.check_output(cmd, stderr=subprocess.DEVNULL)
         python_exe = result.decode().strip()
-        
+
         if python_exe and os.path.isfile(python_exe):
             log.debug("Python 3.13 installation completed: %s", python_exe)
             return python_exe
-        else:
-            log.error("Could not find Python 3.13 executable after installation")
-            return None
-            
+
+        log.error("Could not find Python 3.13 executable after installation")
+        return None
+
     except (subprocess.CalledProcessError, FileNotFoundError) as exc:
         log.debug("Could not install Python 3.13 using uv: %s", exc)
         return None
 
-
 def get_portable_python_url():
-    """Compatibility function - not needed anymore with uv."""
+    """
+    Compatibility stub, not needed anymore with uv.
+    Always returns None.
+    """
     return None
 
-
-def is_version_system_compatible(version, systype):
-    """Check if a version is compatible with the system type."""
-    return True  # Simplified since uv handles compatibility
-
+def is_version_system_compatible(_version, _systype):
+    """
+    Compatibility check. Always returns True since uv handles compatibility.
+    """
+    return True
 
 def check():
-    """Check if current Python environment is compatible (3.10-3.13)."""
-    # platform check
+    """
+    Verify if the current Python environment is compatible (3.10-3.13).
+    Raises IncompatiblePythonError on failure.
+    Returns True if compatible.
+    """
+    # Platform check
     if sys.platform == "cygwin":
         raise exception.IncompatiblePythonError("Unsupported Cygwin platform")
 
-    # version check - accept 3.10-3.13
+    # Version check: Accept only 3.10 up to (and not including) 3.14
     if sys.version_info < (3, 10) or sys.version_info >= (3, 14):
         raise exception.IncompatiblePythonError(
             "Unsupported Python version: %s. "
@@ -122,11 +132,11 @@ def check():
             % platform.python_version(),
         )
 
-    # conda check
+    # Conda environments are not supported
     if is_conda():
         raise exception.IncompatiblePythonError("Conda is not supported")
 
-    # Python 3 for macOS is not compatible with macOS < 10.13
+    # macOS compatibility (Python 3 requires macOS >= 10.13)
     # https://github.com/platformio/platformio-core-installer/issues/70
     if util.IS_MACOS:
         with tempfile.NamedTemporaryFile() as tmpfile:
@@ -135,7 +145,7 @@ def check():
     if not util.IS_WINDOWS:
         return True
 
-    # windows check
+    # Windows environment check for unsupported environments
     if any(s in util.get_pythonexe_path().lower()
            for s in ("msys", "mingw", "emacs")):
         raise exception.IncompatiblePythonError(
@@ -152,9 +162,12 @@ def check():
 
     return True
 
-
 def find_compatible_pythons(ignore_pythons=None, raise_exception=True):
-    """Find compatible Python executables (3.10-3.13) or install Python 3.13 using uv."""
+    """
+    Find all compatible Python executables in the system (Python 3.10 - 3.13).
+    Optionally install Python 3.13 using uv if none are found.
+    Returns a list of executable paths.
+    """
     ignore_list = []
     for p in ignore_pythons or []:
         ignore_list.extend(glob.glob(p))
@@ -191,8 +204,8 @@ def find_compatible_pythons(ignore_pythons=None, raise_exception=True):
                 log.debug("Successfully installed and verified Python 3.13: %s", python_exe)
                 result.append(python_exe)
                 return result
-        except Exception:
-            log.debug("Failed to install Python 3.13 using uv")
+        except (subprocess.CalledProcessError, FileNotFoundError, OSError) as exc:
+            log.debug("Failed to install Python 3.13 using uv: %s", exc)
 
         # If uv installation failed, raise the original error
         raise exception.IncompatiblePythonError(
@@ -204,9 +217,11 @@ def find_compatible_pythons(ignore_pythons=None, raise_exception=True):
 
     return result
 
-
 def _get_python_candidates(exenames):
-    """Get list of Python executable candidates."""
+    """
+    Scan system PATH for all specified Python executables.
+    Returns a list of candidate executable paths.
+    """
     candidates = []
     for exe in exenames:
         for path in os.getenv("PATH").split(os.pathsep):
@@ -216,25 +231,26 @@ def _get_python_candidates(exenames):
 
     if sys.executable in candidates:
         candidates.remove(sys.executable)
-    # put current Python to the top of list
+    # Place the current Python executable at the top of the list
     candidates.insert(0, sys.executable)
     return candidates
 
-
 def _is_python_compatible(python_exe):
-    """Check if a Python executable is compatible (3.10-3.13)."""
+    """
+    Determine if the specified Python executable is compatible (version 3.10 - 3.13).
+    Returns True if compatible, otherwise False.
+    """
     try:
-        # Simple version check using Python itself
+        # Python version check using subprocess
         cmd = [
             python_exe,
             "-c",
-            "import sys; print(f'{sys.version_info.major}."
-            "{sys.version_info.minor}')",
+            "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')",
         ]
         output = subprocess.check_output(cmd, stderr=subprocess.STDOUT)
         version_str = output.decode().strip()
 
-        # Accept Python 3.10-3.13
+        # Match Python version 3.10, 3.11, 3.12, or 3.13
         if re.match(r'^3\.(10|11|12|13)$', version_str):
             log.debug("Found compatible Python %s: %s", python_exe, version_str)
             return True
