@@ -103,7 +103,7 @@ def download_and_install_uv(cache_dir):
                         raise exception.PIOInstallerException("Unsafe path in uv archive (tar)")
                 tar.extractall(extract_dir)
 
-        # Find the uv binary in the extracted files (both Windows and Unix)files
+        # Find the uv binary in the extracted files (both Windows and Unix)
         uv_binary = None
         for root, _, files in os.walk(extract_dir):
             for file in files:
