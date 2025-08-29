@@ -17,7 +17,7 @@ Requirements
 ------------
 
 * Python 3.10 or newer
-* `uv` package manager (automatically downloaded if not available)
+* `uv` package manager (automatically downloaded by the installer if not preinstalled)
 * Internet connection for downloading packages
 
 Development
