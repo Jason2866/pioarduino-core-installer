@@ -103,33 +103,33 @@ def download_and_install_uv(cache_dir):
                         raise exception.PIOInstallerException("Unsafe path in uv archive (tar)")
                 tar.extractall(extract_dir)
 
-            # Find the uv binary in the extracted files
-            uv_binary = None
-            for root, _, files in os.walk(extract_dir):
-                for file in files:
-                    if file in ("uv", "uv.exe"):
-                        uv_binary = os.path.join(root, file)
-                        break
-                if uv_binary:
+        # Find the uv binary in the extracted files (both Windows and Unix)files
+        uv_binary = None
+        for root, _, files in os.walk(extract_dir):
+            for file in files:
+                if file in ("uv", "uv.exe"):
+                    uv_binary = os.path.join(root, file)
                     break
+            if uv_binary:
+                break
 
-            if not uv_binary:
-                raise exception.PIOInstallerException(
-                    "Could not find uv binary in downloaded archive"
-                )
-
-            # Copy uv to cache directory
-            uv_dest = os.path.join(
-                cache_dir, "uv" + (".exe" if util.IS_WINDOWS else "")
+        if not uv_binary:
+            raise exception.PIOInstallerException(
+                "Could not find uv binary in downloaded archive"
             )
-            shutil.copy2(uv_binary, uv_dest)
 
-            # Make executable on Unix systems
-            if not util.IS_WINDOWS:
-                os.chmod(uv_dest, 0o755)
+        # Copy uv to cache directory
+        uv_dest = os.path.join(
+            cache_dir, "uv" + (".exe" if util.IS_WINDOWS else "")
+        )
+        shutil.copy2(uv_binary, uv_dest)
 
-            log.debug("uv installed at %s", uv_dest)
-            return uv_dest
+        # Make executable on Unix systems
+        if not util.IS_WINDOWS:
+            os.chmod(uv_dest, 0o755)
+
+        log.debug("uv installed at %s", uv_dest)
+        return uv_dest
 
     except (requests.RequestException, tarfile.TarError, OSError, exception.PIOInstallerException) as e:
         log.debug("Could not download or install uv: %s", str(e))
