@@ -410,7 +410,7 @@ def fetch_portable_python(dst):
 
     registry_file = _get_registry_file()
     if not registry_file:
-        log.debug("Could not findPython 3.13 for %s", util.get_systype())
+        log.debug("Could not find Python 3.13 for %s", util.get_systype())
         return None
 
     log.debug("Selected Python package: %s", registry_file['name'])
@@ -602,7 +602,7 @@ def _is_python_compatible(python_exe):
         version_str = output.decode().strip()
 
         # Accept Python 3.10-3.13
-        if re.match(r'^3\.(1[0-3])$', version_str):
+        if re.match(r'^3\.(10|11|12|13)$', version_str):
             log.debug("Found compatible Python %s: %s", python_exe, version_str)
             return True
 
