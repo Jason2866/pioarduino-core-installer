@@ -234,10 +234,10 @@ def _is_python_compatible(python_exe):
         output = subprocess.check_output(cmd, stderr=subprocess.STDOUT)
         version_str = output.decode().strip()
 
-#        # Accept Python 3.10-3.13
-#        if re.match(r'^3\.(10|11|12|13)$', version_str):
-#            log.debug("Found compatible Python %s: %s", python_exe, version_str)
-#            return True
+        # Accept Python 3.10-3.13
+        if re.match(r'^3\.(10|11|12|13)$', version_str):
+            log.debug("Found compatible Python %s: %s", python_exe, version_str)
+            return True
 
         log.debug("Incompatible Python %s: %s", python_exe, version_str)
         return False
