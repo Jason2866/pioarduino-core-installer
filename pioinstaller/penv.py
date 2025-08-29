@@ -52,8 +52,7 @@ def get_uv_platform():
         machine = "arm64"
 
     key = (system, machine)
-    if key in platform_map:
-        return platform_map[key]
+    return platform_map.get(key)
 
 
 def download_and_install_uv(cache_dir):
