@@ -25,8 +25,8 @@ jobs:
           enable-cache: true
       - name: Check Python and uv
         run: |
-          python -V
-          which python
+          uv run python -V
+          uv run python -c "import sys,shutil;print(sys.executable);print(shutil.which('python') or '')"
           uv --version
           echo $PATH
       - name: Install dependencies with uv
