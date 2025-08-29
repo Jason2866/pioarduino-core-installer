@@ -18,7 +18,8 @@ install-dev:
 	uv sync --dev
 
 pack:
-	uv run pioinstaller pack
+	mkdir -p dist
+	uv run pioinstaller pack dist/
 
 before-commit: isort format lint test
 
