@@ -589,7 +589,7 @@ def _get_python_candidates(exenames):
 
 
 def _is_python_compatible(python_exe):
-    """Check if a Python executable is compatible (3.10-3.13)."""
+    """Check if a Python executable is compatible (3.13)."""
     try:
         # Simple version check using Python itself
         cmd = [
@@ -601,8 +601,8 @@ def _is_python_compatible(python_exe):
         output = subprocess.check_output(cmd, stderr=subprocess.STDOUT)
         version_str = output.decode().strip()
 
-        # Accept Python 3.10-3.13
-        if re.match(r'^3\.(1[0-3])$', version_str):
+        # Accept Python 3.13
+        if re.match(r'^3\.(1[3])$', version_str):
             log.debug("Found compatible Python %s: %s", python_exe, version_str)
             return True
 
