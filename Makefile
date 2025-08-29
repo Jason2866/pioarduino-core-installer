@@ -1,5 +1,11 @@
 # Use uv for all operations
 
+# Always use phony targets
+.PHONY: all lint isort format test install-dev pack before-commit clean publish
+
+# Default target
+all: before-commit
+
 lint:
 	uv run pylint --rcfile=./.pylintrc ./pioinstaller
 
