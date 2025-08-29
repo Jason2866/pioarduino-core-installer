@@ -55,7 +55,7 @@ def is_portable():
         log.debug("Current Python executable is compatible: %s", sys.executable)
         return True
 
-    print(os.path.normpath(sys.executable))
+    log.debug("Current Python executable: %s", os.path.normpath(sys.executable))
     python_dir = os.path.dirname(sys.executable)
     if not util.IS_WINDOWS:
         # skip "bin" folder for non-Windows platforms
@@ -223,11 +223,12 @@ def _get_python_candidates(exenames):
     Returns a list of candidate executable paths.
     """
     candidates = []
+    env_path = os.getenv("PATH") or ""
     for exe in exenames:
-        for path in os.getenv("PATH").split(os.pathsep):
-            if not os.path.isfile(os.path.join(path, exe)):
-                continue
-            candidates.append(os.path.join(path, exe))
+        for path in env_path.split(os.pathsep):
+            full = os.path.join(path, exe)
+            if os.path.isfile(full) and os.access(full, os.X_OK):
+                candidates.append(full)
 
     if sys.executable in candidates:
         candidates.remove(sys.executable)
