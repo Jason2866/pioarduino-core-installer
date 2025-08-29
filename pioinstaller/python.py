@@ -151,41 +151,6 @@ def _parse_asset_name(asset_name):
     }
 
 
-def _parse_asset_name_fallback(asset_name):
-    """Fallback parsing for alternative naming schemes."""
-    # Alternative regex patterns for different naming conventions
-    fallback_patterns = [
-        # Pattern for simplified naming: cpython-3.13.7-linux-x64.tar.gz
-        re.compile(r'^cpython-(\d+\.\d+\.\d+)-([^-]+)-([^.]+)\.'
-                   r'(tar\.(?:gz|zst))$'),
-        # Pattern for date-only naming:
-        # python-3.13.7-20250818-linux-x64.tar.gz
-        re.compile(r'^python-(\d+\.\d+\.\d+)-(\d+)-([^-]+)-([^.]+)\.'
-                   r'(tar\.(?:gz|zst))$'),
-        # Generic Python naming: python-3.13.7-linux-x64.tar.gz
-        re.compile(r'^python-(\d+\.\d+\.\d+)-([^-]+)-([^.]+)\.'
-                   r'(tar\.(?:gz|zst))$'),
-    ]
-
-    for pattern in fallback_patterns:
-        match = pattern.match(asset_name)
-        if match:
-            groups = match.groups()
-            # Map to standardized format
-            return {
-                'python_version': groups[0],
-                'build_date': groups[1] if len(groups) > 3 else 'unknown',
-                'arch': groups[-3] if len(groups) > 2 else 'unknown',
-                'os': groups[-4] if len(groups) > 3 else 'unknown',
-                'libc': 'unknown',
-                'build_variant': '',
-                'package_type': 'install_only',
-                'compression': groups[-1],
-            }
-
-    return None
-
-
 @lru_cache(maxsize=32)
 def _get_system_mapping(systype):
     """Get system mapping for architecture compatibility (cached)."""
@@ -201,13 +166,13 @@ def _get_system_mapping(systype):
     return mappings.get(systype)
 
 
-def _is_asset_compatible(asset_name, systype):
-    """Check if asset is compatible with target system (Python 3.13 only for installation)."""
+def _is_asset_compatible_python_313_only(asset_name, systype):
+    """Check if asset is Python 3.13 and compatible with target system."""
     parsed = _parse_asset_name(asset_name)
     if not parsed:
         return False
 
-    # For installation, only Python 3.13 assets are considered
+    # Only accept Python 3.13 for installation
     version_parts = parsed['python_version'].split('.')
     major = int(version_parts[0])
     minor = int(version_parts[1])
@@ -220,73 +185,27 @@ def _is_asset_compatible(asset_name, systype):
                              ['freethreaded', 'debug', 'noopt']):
         return False
 
-    # System compatibility mapping
+    # Get system mapping for architecture and OS
     system_map = _get_system_mapping(systype)
     if not system_map:
         return False
 
+    # Check architecture and OS compatibility
     return (parsed['arch'] == system_map['arch'] and
-            parsed['os'] == system_map['os'] and
-            parsed['libc'].startswith(system_map['libc']))
+            parsed['os'] == system_map['os'])
 
 
-def _is_asset_compatible_fallback(asset_name, systype):
-    """Fallback compatibility check for alternative naming schemes (Python 3.13 only)."""
-    parsed = _parse_asset_name_fallback(asset_name)
-    if not parsed:
-        return False
-
-    # For installation, only Python 3.13 assets are considered
-    version_parts = parsed['python_version'].split('.')
-    major = int(version_parts[0])
-    minor = int(version_parts[1])
-    if major != 3 or minor != 13:
-        return False
-
-    # Simple system compatibility check based on common naming patterns
-    name = asset_name.lower()
-    compatibility_map = {
-        'darwin-x64': ['macos', 'darwin', 'osx', 'x86_64'],
-        'darwin-arm64': ['macos', 'darwin', 'osx', 'arm64', 'aarch64'],
-        'linux-x64': ['linux', 'x86_64', 'amd64'],
-        'linux-arm64': ['linux', 'arm64', 'aarch64'],
-        'linux-armv7l': ['linux', 'armv7', 'arm'],
-        'win32-x64': ['windows', 'win', 'x86_64', 'amd64'],
-        'win32-ia32': ['windows', 'win', 'i686', 'x86'],
-    }
-
-    patterns = compatibility_map.get(systype, [])
-    return any(pattern in name for pattern in patterns)
-
-
-def _score_asset(asset_name, systype):
-    """Score assets"""
+def _score_asset(asset_name):
+    """Score assets for selection preference."""
     parsed = _parse_asset_name(asset_name)
-    is_fallback = False
-
-    # Try fallback parsing if primary parsing fails
     if not parsed:
-        parsed = _parse_asset_name_fallback(asset_name)
-        is_fallback = True
-
-    if not parsed:
-        return -1
-
-    # Check compatibility
-    is_compatible = (_is_asset_compatible_fallback(asset_name, systype)
-                     if is_fallback
-                     else _is_asset_compatible(asset_name, systype))
-
-    if not is_compatible:
         return -1
 
     version_parts = parsed['python_version'].split('.')
     patch = int(version_parts[2])
-    score = patch
 
-    # Prefer primary naming scheme over fallback
-    if is_fallback:
-        score -= 5000
+    # Base score is patch version
+    score = patch
 
     # Performance optimization bonuses
     build_variant = parsed['build_variant']
@@ -308,7 +227,7 @@ def _score_asset(asset_name, systype):
     return score
 
 
-def _try_get_registry_from_release(release_tag, systype):
+def _try_get_registry_from_release(release_tag, systype, python_313_only=False):
     """Try to get registry file from a specific release tag."""
     try:
         # Load release data from astral-sh/python-build-standalone
@@ -333,7 +252,7 @@ def _try_get_registry_from_release(release_tag, systype):
             _cached_release_data = release_data
             _release_cache_time = now
 
-        return _select_best_asset(release_data, systype)
+        return _select_best_asset(release_data, systype, python_313_only)
     except (requests.exceptions.RequestException,
             requests.exceptions.JSONDecodeError,
             KeyError, ValueError):
@@ -341,14 +260,14 @@ def _try_get_registry_from_release(release_tag, systype):
         return None
 
 
-def _select_best_asset(release_data, systype):
+def _select_best_asset(release_data, systype, python_313_only=False):
     """Select the best asset for the given system type."""
-    # Filter compatible assets with multiple naming pattern support
+    # Filter compatible assets
     compatible_assets = []
     for asset in release_data['assets']:
-        if (_is_asset_compatible(asset['name'], systype) or
-                _is_asset_compatible_fallback(asset['name'], systype)):
-            compatible_assets.append(asset)
+        if python_313_only:
+            if _is_asset_compatible_python_313_only(asset['name'], systype):
+                compatible_assets.append(asset)
 
     if not compatible_assets:
         return None
@@ -358,7 +277,7 @@ def _select_best_asset(release_data, systype):
     best_score = -1
 
     for asset in compatible_assets:
-        current_score = _score_asset(asset['name'], systype)
+        current_score = _score_asset(asset['name'])
         if current_score > best_score:
             best_score = current_score
             best_asset = asset
@@ -380,7 +299,7 @@ def _select_best_asset(release_data, systype):
     }
 
 
-def _get_registry_file():
+def _get_registry_file(python_313_only=False):
     """Fetch Python packages from astral-sh/python-build-standalone."""
     systype = util.get_systype()
     now = time.time()
@@ -388,27 +307,27 @@ def _get_registry_file():
     # Use cached data if still valid
     if (_cached_release_data and
             (now - _release_cache_time) < _RELEASE_CACHE_TTL):
-        return _select_best_asset(_cached_release_data, systype)
+        return _select_best_asset(_cached_release_data, systype, python_313_only)
 
     # Try latest release first
     selected_asset = _try_get_registry_from_release(_get_latest_release_tag(),
-                                                    systype)
+                                                    systype, python_313_only)
 
     # If latest release has no compatible assets, fallback to known working
     if not selected_asset and _cached_latest_tag != _FALLBACK_RELEASE_TAG:
         log.warning('No compatible assets in latest release, '
                     'trying fallback release')
         selected_asset = _try_get_registry_from_release(_FALLBACK_RELEASE_TAG,
-                                                        systype)
+                                                        systype, python_313_only)
 
     return selected_asset
 
 
 def fetch_portable_python(dst):
-    """Download and install Python 3.13 distribution."""
+    """Download and install Python 3.13 distribution only."""
     log.debug("Starting Python 3.13 installation")
 
-    registry_file = _get_registry_file()
+    registry_file = _get_registry_file(python_313_only=True)
     if not registry_file:
         log.debug("Could not find Python 3.13 for %s", util.get_systype())
         return None
@@ -459,7 +378,7 @@ def fetch_portable_python(dst):
 
 def get_portable_python_url():
     """Compatibility function - uses the astral-sh repository."""
-    registry_file = _get_registry_file()
+    registry_file = _get_registry_file(python_313_only=True)
     return registry_file['download_url'] if registry_file else None
 
 
@@ -516,7 +435,7 @@ def check():
 def find_compatible_pythons(
     ignore_pythons=None, raise_exception=True
 ):  # pylint: disable=too-many-branches
-    """Find compatible Python executables (3.10-3.13) or install Python 3.13."""
+    """Find compatible Python executables (3.10-3.13) or install Python 3.13 only."""
     ignore_list = []
     for p in ignore_pythons or []:
         ignore_list.extend(glob.glob(p))
@@ -544,7 +463,7 @@ def find_compatible_pythons(
             result.append(item)
 
     if not result and raise_exception:
-        # Try to download Python 3.13 before giving up
+        # Try to download Python 3.13 specifically before giving up
         log.debug("No compatible Python 3.10-3.13 found, attempting to download "
                   "Python 3.13")
         try:
@@ -553,7 +472,7 @@ def find_compatible_pythons(
                 portable_python = fetch_portable_python(temp_dir)
                 if portable_python and _is_python_compatible(portable_python):
                     log.debug(
-                        "Successfully downloaded and verified Python: "
+                        "Successfully downloaded and verified Python 3.13: "
                         "%s", portable_python,
                     )
                     result.append(portable_python)
