@@ -39,11 +39,11 @@ try:
     tag_name = api_data["tag_name"]
     data = f"https://github.com/pioarduino/platformio-core/archive/refs/tags/{tag_name}.zip"
 except KeyError:
-    data = "https://github.com/pioarduino/platformio-core/archive/refs/tags/v6.1.16.zip"
-    print("Could not download actual pioarduino core. Try to install v6.1.16 instead.")
+    data = "https://github.com/pioarduino/platformio-core/archive/refs/tags/v6.1.18.zip"
+    print("Could not download actual pioarduino core. Try to install v6.1.18 instead.")
 PIO_CORE_RELEASE_URL = data
 PIO_CORE_DEVELOP_URL = (
-    "https://github.com/pioarduino/platformio-core/archive/pio_github.zip"
+    "https://github.com/pioarduino/platformio-core/archive/pioarduino.zip"
 )
 UPDATE_INTERVAL = 60 * 60 * 24 * 31  # 31 days
 
