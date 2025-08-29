@@ -36,6 +36,7 @@ def get_uv_platform():
     """Get the uv platform identifier for the current system."""
     platform_map = {
         ("Windows", "AMD64"): "x86_64-pc-windows-msvc",
+        ("Windows", "ARM64"): "aarch64-pc-windows-msvc",
         ("Windows", "x86"): "i686-pc-windows-msvc",
         ("Darwin", "x86_64"): "x86_64-apple-darwin",
         ("Darwin", "arm64"): "aarch64-apple-darwin",
@@ -52,7 +53,16 @@ def get_uv_platform():
         machine = "arm64"
 
     key = (system, machine)
-    return platform_map.get(key)
+    plat = platform_map.get(key)
+    # Detect musl on Linux
+    if system == "Linux" and plat and "-unknown-linux-gnu" in plat:
+        try:
+            out = subprocess.check_output(["ldd", "--version"], stderr=subprocess.STDOUT)
+            if b"musl" in out:
+                plat = plat.replace("-unknown-linux-gnu", "-unknown-linux-musl")
+        except Exception:
+            pass
+    return plat
 
 
 def download_and_install_uv(cache_dir):
