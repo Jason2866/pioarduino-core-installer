@@ -14,6 +14,7 @@
 
 import os
 import subprocess
+import sys
 import tempfile
 
 import pytest
@@ -31,7 +32,7 @@ def test_pioinstaller_packer():
         # If dependencies are missing, this will fail with ImportError
         try:
             output = subprocess.check_output(
-                ["python", script_path, "--version"],
+                [sys.executable, script_path, "--version"],
                 stderr=subprocess.STDOUT,
                 timeout=30,
             )
