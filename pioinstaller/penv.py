@@ -93,14 +93,14 @@ def download_and_install_uv(cache_dir):
                 for m in zf.infolist():
                     dest = os.path.abspath(os.path.join(extract_dir, m.filename))
                     if not dest.startswith(os.path.abspath(extract_dir) + os.sep):
-                        raise exception.PIOInstallerException("Unsafe path in uv archive (zip)")
+                        raise exception.PIOInstallerException("Unsafe path in archive")
                 zf.extractall(extract_dir)
         else:
             with tarfile.open(uv_archive_path, "r:*") as tar:
                 for m in tar.getmembers():
                     dest = os.path.abspath(os.path.join(extract_dir, m.name))
                     if not dest.startswith(os.path.abspath(extract_dir) + os.sep):
-                        raise exception.PIOInstallerException("Unsafe path in uv archive (tar)")
+                        raise exception.PIOInstallerException("Unsafe path in archive")
                 tar.extractall(extract_dir)
 
         # Find the uv binary in the extracted files (both Windows and Unix)
@@ -181,7 +181,7 @@ def create_core_penv(penv_dir=None, ignore_pythons=None):
     uv_exe = get_uv_executable()
     if not uv_exe:
         raise exception.PIOInstallerException(
-            "uv package manager is required but not available. Please install uv first."
+            "uv package manager is required. Please install uv first."
         )
     # Ensure uv is resolvable via PATH for helpers that shell out to "uv"
     uv_dir = os.path.dirname(uv_exe)
@@ -226,7 +226,9 @@ def create_venv_with_uv(uv_exe, python_exe, penv_dir):
     try:
         # Create venv with uv
         cmd = [uv_exe, "venv", "--python", python_exe, penv_dir]
-        subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
+        subprocess.run(
+            cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT
+        )
 
         # Verify the venv was created
         expected_python = os.path.join(
