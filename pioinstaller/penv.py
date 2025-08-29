@@ -55,13 +55,6 @@ def get_uv_platform():
     if key in platform_map:
         return platform_map[key]
 
-    # Default fallback
-    if system == "Windows":
-        return "x86_64-pc-windows-msvc"
-    if system == "Darwin":
-        return "x86_64-apple-darwin"
-    return "x86_64-unknown-linux-gnu"
-
 
 def download_and_install_uv(cache_dir):
     """Download and install uv package manager."""
@@ -132,7 +125,6 @@ def get_uv_executable():
         return cached_uv
 
     # Download and install uv
-    click.echo("Downloading and installing uv package manager...")
     uv_exe = download_and_install_uv(cache_dir)
     if uv_exe:
         click.echo("uv has been successfully installed!")
@@ -186,7 +178,7 @@ def create_core_penv(penv_dir=None, ignore_pythons=None):
     )
     init_state(python_exe, penv_dir)
     click.echo(
-        "Virtual environment has been successfully created with uv installed at %s!"
+        "Virtual environment has been successfully created at %s!"
         % penv_dir
     )
     return result_dir
@@ -194,7 +186,6 @@ def create_core_penv(penv_dir=None, ignore_pythons=None):
 
 def create_venv_with_uv(uv_exe, python_exe, penv_dir):
     """Create virtual environment using uv and install uv into the venv."""
-    log.debug("Using uv with %s Python for virtual environment.", python_exe)
 
     # Remove existing directory if it exists
     util.safe_remove_dir(penv_dir)
@@ -202,7 +193,6 @@ def create_venv_with_uv(uv_exe, python_exe, penv_dir):
     try:
         # Create venv with uv
         cmd = [uv_exe, "venv", "--python", python_exe, penv_dir]
-        log.debug("Running: %s", " ".join(cmd))
         subprocess.check_call(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
         # Verify the venv was created
@@ -237,7 +227,6 @@ def install_uv_in_venv_with_system_uv(system_uv_exe, penv_dir):
     env["VIRTUAL_ENV"] = penv_dir
 
     cmd = [system_uv_exe, "pip", "install", "uv"]
-    log.debug("Using system uv to install uv in venv: %s", " ".join(cmd))
 
     try:
         subprocess.check_call(
