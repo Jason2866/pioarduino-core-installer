@@ -23,28 +23,42 @@ import sys
 import time
 
 import click
-import requests
 import semantic_version
 
 from pioinstaller import __version__, exception, home, util
 
 log = logging.getLogger(__name__)
 
-PIO_CORE_API_URL = (
-    "https://api.github.com/repos/pioarduino/platformio-core/releases/latest"
-)
-api_data = requests.get(PIO_CORE_API_URL, timeout=10).json()
-try:
-    # Get the tag name and construct a proper zip URL that uv will accept
-    tag_name = api_data["tag_name"]
-    data = f"https://github.com/pioarduino/platformio-core/archive/refs/tags/{tag_name}.zip"
-except KeyError:
-    data = "https://github.com/pioarduino/platformio-core/archive/refs/tags/v6.1.18.zip"
-    print("Could not download actual pioarduino core. Try to install v6.1.18 instead.")
-PIO_CORE_RELEASE_URL = data
-PIO_CORE_DEVELOP_URL = (
-    "https://github.com/pioarduino/platformio-core/archive/pioarduino.zip"
-)
+PIO_CORE_API_URL = "https://api.github.com/repos/pioarduino/platformio-core/releases/latest"
+PIO_CORE_DEVELOP_URL = "https://github.com/pioarduino/platformio-core/archive/pioarduino.zip"
+
+_CACHED_RELEASE_URL = None
+
+def _get_release_url():
+    """Resolve latest release zip URL lazily with fallback and cache."""
+    global _CACHED_RELEASE_URL
+    if _CACHED_RELEASE_URL:
+        return _CACHED_RELEASE_URL
+    try:
+        # Lazy import to avoid hard dependency at import time
+        import requests  # noqa: WPS433
+
+        resp = requests.get(PIO_CORE_API_URL, timeout=5)
+        resp.raise_for_status()
+        tag_name = resp.json().get("tag_name")
+        if tag_name:
+            _CACHED_RELEASE_URL = (
+                f"https://github.com/pioarduino/platformio-core/archive/refs/tags/{tag_name}.zip"
+            )
+        else:
+            raise KeyError("tag_name missing")
+    except Exception as exc:  # noqa: BLE001
+        log.debug("Falling back to pinned core URL due to: %s", exc)
+        _CACHED_RELEASE_URL = (
+            "https://github.com/pioarduino/platformio-core/archive/refs/tags/v6.1.18.zip"
+        )
+    return _CACHED_RELEASE_URL
+
 UPDATE_INTERVAL = 60 * 60 * 24 * 31  # 31 days
 
 
@@ -142,7 +156,7 @@ def _install_with_uv(uv_exe, penv_dir, develop):
                 penv.get_penv_bin_dir(penv_dir),
                 "python.exe" if util.IS_WINDOWS else "python",
             ),
-            PIO_CORE_DEVELOP_URL,
+            _get_release_url(),
         ]
     else:
         click.echo("Installing pioarduino Core using uv")
@@ -155,7 +169,7 @@ def _install_with_uv(uv_exe, penv_dir, develop):
                 penv.get_penv_bin_dir(penv_dir),
                 "python.exe" if util.IS_WINDOWS else "python",
             ),
-            PIO_CORE_RELEASE_URL,
+            _get_release_url(),
         ]
 
     log.debug("Running: %s", " ".join(command))
