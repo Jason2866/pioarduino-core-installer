@@ -156,7 +156,7 @@ def _install_with_uv(uv_exe, penv_dir, develop):
                 penv.get_penv_bin_dir(penv_dir),
                 "python.exe" if util.IS_WINDOWS else "python",
             ),
-            _get_release_url(),
+            PIO_CORE_DEVELOP_URL,
         ]
     else:
         click.echo("Installing pioarduino Core using uv")
