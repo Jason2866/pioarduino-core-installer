@@ -183,6 +183,11 @@ def create_core_penv(penv_dir=None, ignore_pythons=None):
         raise exception.PIOInstallerException(
             "uv package manager is required but not available. Please install uv first."
         )
+    # Ensure uv is resolvable via PATH for helpers that shell out to "uv"
+    uv_dir = os.path.dirname(uv_exe)
+    current_path = os.environ.get("PATH", "")
+    if uv_dir not in current_path.split(os.pathsep):
+        os.environ["PATH"] = uv_dir + os.pathsep + current_path
 
     result_dir = None
     for python_exe in python.find_compatible_pythons(ignore_pythons):
@@ -257,13 +262,13 @@ def install_uv_in_venv_with_system_uv(system_uv_exe, penv_dir):
     cmd = [system_uv_exe, "pip", "install", "uv"]
 
     try:
-        subprocess.check_call(
-            cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=env
+        subprocess.run(
+            cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT, env=env
         )
         log.debug("Successfully installed uv in venv")
     except subprocess.CalledProcessError as e:
-        log.debug("Failed to install uv in venv: %s", str(e))
-        raise exception.PIOInstallerException("Could not install uv in penv")
+        log.debug("Failed to install uv in venv: %s", e)
+        raise exception.PIOInstallerException("Could not install uv in penv") from e
 
 
 def init_state(python_exe, penv_dir):
