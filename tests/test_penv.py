@@ -18,7 +18,7 @@ import subprocess
 
 import pytest
 
-from pioinstaller import __version__, penv, python, util
+from pioinstaller import __version__, penv, util
 
 
 def test_penv_creation_with_uv(tmpdir):
