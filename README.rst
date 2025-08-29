@@ -10,7 +10,7 @@ Features
 
 * Fast installation using `uv` package manager
 * Isolated virtual environment creation
-* Cross-platform compatibility (Windows, macOS, Linux)
+* Cross-platform compatibility (Windows, MacOS, Linux)
 * Python 3.10+ support
 
 Requirements
@@ -23,7 +23,7 @@ Development
 
 This project uses modern Python packaging with `pyproject.toml` and `uv`.
 
-Quick start for development::
+Quick start for development (Linux and MacOS)::
 
     # Install uv if not already installed
     curl -LsSf https://astral.sh/uv/install.sh | sh
