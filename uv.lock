@@ -235,13 +235,10 @@ wheels = [
 name = "pioarduino-installer"
 source = { editable = "." }
 dependencies = [
-    { name = "certifi" },
     { name = "click" },
     { name = "colorama" },
     { name = "requests" },
     { name = "semantic-version" },
-    { name = "urllib3" },
-    { name = "wheel" },
 ]
 
 [package.dev-dependencies]
@@ -255,13 +252,10 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "certifi", specifier = ">=2025.8.3" },
     { name = "click", specifier = ">=8.1.0" },
     { name = "colorama", specifier = ">=0.4.6" },
     { name = "requests", specifier = ">=2.32.0" },
     { name = "semantic-version", specifier = ">=2.10.0" },
-    { name = "urllib3", specifier = ">=2.0" },
-    { name = "wheel", specifier = ">=0.43.0" },
 ]
 
 [package.metadata.requires-dev]
@@ -451,13 +445,4 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/6d/7d/a57198784a1dca07668007837cfd00346cde2da079697f67daaedbfb1376/uv-0.8.13-py3-none-win32.whl", hash = "sha256:d22fa55580b224779279b98e0b23cbc45e51837e1fac616d7c5d03aff668a998", size = 18661160, upload-time = "2025-08-21T19:20:10.393Z" },
     { url = "https://files.pythonhosted.org/packages/3f/14/65ba1f45c27ff975497f2db965cd2b989fdda031afa76b978ddc72a66032/uv-0.8.13-py3-none-win_amd64.whl", hash = "sha256:20862f612de38f6dea55d40467a29f3cb621b256a4b5891ae55debbbdf1db2b4", size = 20556536, upload-time = "2025-08-21T19:20:12.745Z" },
     { url = "https://files.pythonhosted.org/packages/c9/47/16a2eb25166861af1a139e506e5595cb92c7f7e5aae6e71feec135093394/uv-0.8.13-py3-none-win_arm64.whl", hash = "sha256:404ca19b2d860ab661e1d78633f594e994f8422af8772ad237d763fe353da2ab", size = 19028395, upload-time = "2025-08-21T19:20:15.035Z" },
-]
-
-[[package]]
-name = "wheel"
-version = "0.45.1"
-source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/8a/98/2d9906746cdc6a6ef809ae6338005b3f21bb568bea3165cfc6a243fdc25c/wheel-0.45.1.tar.gz", hash = "sha256:661e1abd9198507b1409a20c02106d9670b2576e916d58f520316666abca6729", size = 107545, upload-time = "2024-11-23T00:18:23.513Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/0b/2c/87f3254fd8ffd29e4c02732eee68a83a1d3c346ae39bc6822dcbcb697f2b/wheel-0.45.1-py3-none-any.whl", hash = "sha256:708e7481cc80179af0e556bbf0cc00b8444c7321e2700b8d8580231d13017248", size = 72494, upload-time = "2024-11-23T00:18:21.207Z" },
 ]
