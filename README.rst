@@ -23,8 +23,6 @@ Development
 
 This project uses modern Python packaging with `pyproject.toml` and `uv`.
 
-**Note:** If `uv` is not installed on your system, the installer will automatically download and install it for you.
-
 Quick start for development::
 
     # Install uv if not already installed
