@@ -38,7 +38,7 @@ _release_cache_time = 0
 _latest_tag_cache_time = 0
 
 # Fallback release tag if latest release has incompatible naming
-_FALLBACK_RELEASE_TAG = '20250818'
+_FALLBACK_RELEASE_TAG = '20250828'
 
 # Pre-compiled regex for better performance
 _ASSET_NAME_REGEX = re.compile(
@@ -49,20 +49,18 @@ _ASSET_NAME_REGEX = re.compile(
 
 def is_conda():
     """Check if current Python is running in a conda environment."""
-    return any(
-        [
-            os.path.exists(os.path.join(sys.prefix, "conda-meta")),
-            # (os.getenv("CONDA_PREFIX") or os.getenv("CONDA_DEFAULT_ENV")),
-            "anaconda" in sys.executable.lower(),
-            "miniconda" in sys.executable.lower(),
-            "continuum analytics" in sys.version.lower(),
-            "conda" in sys.version.lower(),
-        ]
-    )
+    return any([
+        os.path.exists(os.path.join(sys.prefix, "conda-meta")),
+        # (os.getenv("CONDA_PREFIX") or os.getenv("CONDA_DEFAULT_ENV")),
+        "anaconda" in sys.executable.lower(),
+        "miniconda" in sys.executable.lower(),
+        "continuum analytics" in sys.version.lower(),
+        "conda" in sys.version.lower(),
+    ])
 
 
 def is_portable():
-    """Check if current Python is portable or compatible (3.10-3.13)."""
+    """Check if current Python is compatible (3.10-3.13)."""
     # Check for WinPython first
     try:
         __import__("winpython")
@@ -80,7 +78,7 @@ def is_portable():
         # skip "bin" folder
         python_dir = os.path.dirname(python_dir)
 
-    # Check for portable Python manifest
+    # Check for Python manifest
     manifest_path = os.path.join(python_dir, "package.json")
     if not os.path.isfile(manifest_path):
         return False
@@ -114,7 +112,7 @@ def _get_latest_release_tag():
             timeout=10,
             headers={
                 'Accept': 'application/vnd.github.v3+json',
-                'User-Agent': 'PlatformIO-Python-Installer',
+                'User-Agent': 'pioarduino-Python-Installer',
             }
         )
         response.raise_for_status()
@@ -204,16 +202,16 @@ def _get_system_mapping(systype):
 
 
 def _is_asset_compatible(asset_name, systype):
-    """Check if asset is compatible with target system."""
+    """Check if asset is compatible with target system (Python 3.13 only for installation)."""
     parsed = _parse_asset_name(asset_name)
     if not parsed:
         return False
 
-    # Quick Python version check (max 3.13)
+    # For installation, only Python 3.13 assets are considered
     version_parts = parsed['python_version'].split('.')
     major = int(version_parts[0])
     minor = int(version_parts[1])
-    if major != 3 or minor > 13:
+    if major != 3 or minor != 13:
         return False
 
     # Exclude unwanted build variants
@@ -233,16 +231,16 @@ def _is_asset_compatible(asset_name, systype):
 
 
 def _is_asset_compatible_fallback(asset_name, systype):
-    """Fallback compatibility check for alternative naming schemes."""
+    """Fallback compatibility check for alternative naming schemes (Python 3.13 only)."""
     parsed = _parse_asset_name_fallback(asset_name)
     if not parsed:
         return False
 
-    # Python version check
+    # For installation, only Python 3.13 assets are considered
     version_parts = parsed['python_version'].split('.')
     major = int(version_parts[0])
     minor = int(version_parts[1])
-    if major != 3 or minor > 13:
+    if major != 3 or minor != 13:
         return False
 
     # Simple system compatibility check based on common naming patterns
@@ -262,7 +260,7 @@ def _is_asset_compatible_fallback(asset_name, systype):
 
 
 def _score_asset(asset_name, systype):
-    """Score assets to prefer the best build variant."""
+    """Score assets"""
     parsed = _parse_asset_name(asset_name)
     is_fallback = False
 
@@ -282,47 +280,26 @@ def _score_asset(asset_name, systype):
     if not is_compatible:
         return -1
 
-    score = 0
     version_parts = parsed['python_version'].split('.')
-    major = int(version_parts[0])
-    minor = int(version_parts[1])
     patch = int(version_parts[2])
-
-    # Version priority scoring with explicit preferences
-    # Python 3.13 gets the highest base score
-    if major == 3:
-        if minor == 13:
-            score += 50000  # Highest priority for 3.13
-        elif minor == 12:
-            score += 40000  # Second priority for 3.12
-        elif minor == 11:
-            score += 30000  # Third priority for 3.11
-        elif minor == 10:
-            score += 20000  # Fourth priority for 3.10
-        else:
-            score += major * 10000 + minor * 100  # Fallback for other versions
-    else:
-        score += major * 10000 + minor * 100  # Non-Python 3 versions
-
-    # Add patch version bonus (small increment)
-    score += patch
+    score = patch
 
     # Prefer primary naming scheme over fallback
     if is_fallback:
-        score -= 5000  # Penalty for fallback naming
+        score -= 5000
 
     # Performance optimization bonuses
     build_variant = parsed['build_variant']
     package_type = parsed['package_type']
 
     if build_variant and any(opt in build_variant for opt in ['pgo', 'lto']):
-        score += 1000  # Highly prefer optimized builds
+        score += 1000
 
     if package_type and 'install' in package_type:
-        score += 500  # Prefer install-only packages
+        score += 500
 
     if package_type and 'stripped' in package_type:
-        score += 100  # Prefer stripped binaries
+        score += 100
 
     # Slight preference for tar.gz for maximum compatibility
     if parsed['compression'] == 'tar.gz':
@@ -341,7 +318,7 @@ def _try_get_registry_from_release(release_tag, systype):
             timeout=60,
             headers={
                 'Accept': 'application/vnd.github.v3+json',
-                'User-Agent': 'PlatformIO-Python-Installer',
+                'User-Agent': 'pioarduino-Python-Installer',
             }
         )
         response.raise_for_status()
@@ -404,7 +381,7 @@ def _select_best_asset(release_data, systype):
 
 
 def _get_registry_file():
-    """Fetch portable Python packages from astral-sh/python-build-standalone."""
+    """Fetch Python packages from astral-sh/python-build-standalone."""
     systype = util.get_systype()
     now = time.time()
 
@@ -418,7 +395,6 @@ def _get_registry_file():
                                                     systype)
 
     # If latest release has no compatible assets, fallback to known working
-    # release
     if not selected_asset and _cached_latest_tag != _FALLBACK_RELEASE_TAG:
         log.warning('No compatible assets in latest release, '
                     'trying fallback release')
@@ -429,12 +405,12 @@ def _get_registry_file():
 
 
 def fetch_portable_python(dst):
-    """Download and install portable Python distribution."""
-    log.debug("Starting portable Python installation")
+    """Download and install Python 3.13 distribution."""
+    log.debug("Starting Python 3.13 installation")
 
     registry_file = _get_registry_file()
     if not registry_file:
-        log.debug("Could not find portable Python for %s", util.get_systype())
+        log.debug("Could not findPython 3.13 for %s", util.get_systype())
         return None
 
     log.debug("Selected Python package: %s", registry_file['name'])
@@ -459,7 +435,7 @@ def fetch_portable_python(dst):
         util.safe_create_dir(python_dir, raise_exception=True)
 
         # Extract archive
-        log.debug("Unpacking portable python...")
+        log.debug("Unpacking python...")
         util.unpack_archive(archive_path, python_dir)
 
         # Return path to Python executable
@@ -473,16 +449,16 @@ def fetch_portable_python(dst):
             log.error("Python executable does not exist after extraction!")
             return None
 
-        log.debug("Python installation completed: %s", python_dir)
+        log.debug("Python 3.13 installation completed: %s", python_dir)
         return python_exe
 
     except (OSError, PermissionError) as exc:
-        log.debug("Could not download portable python: %s", exc)
+        log.debug("Could not download python: %s", exc)
         return None
 
 
 def get_portable_python_url():
-    """Compatibility function - now uses the new astral-sh repository."""
+    """Compatibility function - uses the astral-sh repository."""
     registry_file = _get_registry_file()
     return registry_file['download_url'] if registry_file else None
 
@@ -493,16 +469,16 @@ def is_version_system_compatible(version, systype):
 
 
 def check():
-    """Check if current Python environment is compatible."""
+    """Check if current Python environment is compatible (3.10-3.13)."""
     # platform check
     if sys.platform == "cygwin":
         raise exception.IncompatiblePythonError("Unsupported Cygwin platform")
 
-    # version check
-    if sys.version_info < (3, 10):
+    # version check - accept 3.10-3.13
+    if sys.version_info < (3, 10) or sys.version_info >= (3, 14):
         raise exception.IncompatiblePythonError(
             "Unsupported Python version: %s. "
-            "Minimum supported Python version is 3.10 or above."
+            "Supported Python versions are 3.10 to 3.13."
             % platform.python_version(),
         )
 
@@ -510,7 +486,7 @@ def check():
     if is_conda():
         raise exception.IncompatiblePythonError("Conda is not supported")
 
-    # portable Python 3 for macOS is not compatible with macOS < 10.13
+    # Python 3 for macOS is not compatible with macOS < 10.13
     # https://github.com/platformio/platformio-core-installer/issues/70
     if util.IS_MACOS:
         with tempfile.NamedTemporaryFile() as tmpfile:
@@ -540,7 +516,7 @@ def check():
 def find_compatible_pythons(
     ignore_pythons=None, raise_exception=True
 ):  # pylint: disable=too-many-branches
-    """Find compatible Python executables using direct version checks."""
+    """Find compatible Python executables (3.10-3.13) or install Python 3.13."""
     ignore_list = []
     for p in ignore_pythons or []:
         ignore_list.extend(glob.glob(p))
@@ -568,28 +544,28 @@ def find_compatible_pythons(
             result.append(item)
 
     if not result and raise_exception:
-        # Try to download portable Python before giving up
-        log.debug("No compatible Python found, attempting to download "
-                  "portable Python")
+        # Try to download Python 3.13 before giving up
+        log.debug("No compatible Python 3.10-3.13 found, attempting to download "
+                  "Python 3.13")
         try:
             # Create a temporary directory for portable Python
             with tempfile.TemporaryDirectory() as temp_dir:
                 portable_python = fetch_portable_python(temp_dir)
                 if portable_python and _is_python_compatible(portable_python):
                     log.debug(
-                        "Successfully downloaded and verified portable Python: "
+                        "Successfully downloaded and verified Python: "
                         "%s", portable_python,
                     )
                     result.append(portable_python)
                     return result
         except (OSError, PermissionError, subprocess.CalledProcessError):
-            log.debug("Failed to download portable Python")
+            log.debug("Failed to download Python 3.13")
 
         # If portable Python download failed, raise the original error
         raise exception.IncompatiblePythonError(
-            "Could not find compatible Python 3.10 or above in your system. "
-            "Attempted to download portable Python failed. "
-            "Please install the latest official Python 3 and restart "
+            "Could not find compatible Python 3.10-3.13 in your system. "
+            "Attempted to download Python 3.13 failed. "
+            "Please install Python 3.10, 3.11, 3.12, or 3.13 and restart "
             "installation."
         )
 
@@ -613,7 +589,7 @@ def _get_python_candidates(exenames):
 
 
 def _is_python_compatible(python_exe):
-    """Check if a Python executable is compatible (3.10+)."""
+    """Check if a Python executable is compatible (3.10-3.13)."""
     try:
         # Simple version check using Python itself
         cmd = [
@@ -624,10 +600,9 @@ def _is_python_compatible(python_exe):
         ]
         output = subprocess.check_output(cmd, stderr=subprocess.STDOUT)
         version_str = output.decode().strip()
-        major, minor = map(int, version_str.split("."))
 
-        # Check if it's Python 3.10 or higher
-        if major >= 3 and minor >= 10:
+        # Accept Python 3.10-3.13
+        if re.match(r'^3\.(1[0-3])$', version_str):
             log.debug("Found compatible Python %s: %s", python_exe, version_str)
             return True
 
