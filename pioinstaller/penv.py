@@ -29,7 +29,7 @@ from pioinstaller import __version__, core, exception, python, util
 log = logging.getLogger(__name__)
 
 
-UV_URL = "https://github.com/astral-sh/uv/releases/latest/download/uv-{platform}.tar.gz"
+UV_URL = "https://github.com/astral-sh/uv/releases/latest/download/uv-{platform}.{ext}"
 
 
 def get_uv_platform():
@@ -58,21 +58,40 @@ def get_uv_platform():
 def download_and_install_uv(cache_dir):
     """Download and install uv package manager."""
     uv_platform = get_uv_platform()
-    uv_url = f"https://github.com/astral-sh/uv/releases/latest/download/uv-{uv_platform}.tar.gz"
+    if not uv_platform:
+        raise exception.PIOInstallerException(
+            f"Unsupported OS/architecture for uv: {platform.system()}/{platform.machine()}"
+        )
+    ext = "zip" if util.IS_WINDOWS else "tar.gz"
+    uv_url = UV_URL.format(platform=uv_platform, ext=ext)
 
     log.debug("Downloading uv from %s", uv_url)
-    uv_archive_path = os.path.join(cache_dir, "tmp", f"uv-{uv_platform}.tar.gz")
+    tmp_dir = os.path.join(cache_dir, "tmp")
+    os.makedirs(tmp_dir, exist_ok=True)
+    uv_archive_path = os.path.join(tmp_dir, f"uv-{uv_platform}.{ext}")
 
     try:
         util.download_file(uv_url, uv_archive_path)
 
-        # Extract uv binary
-        with tarfile.open(uv_archive_path, "r:gz") as tar:
-            # Extract all files to a temporary directory
-            extract_dir = os.path.join(cache_dir, "tmp", "uv-extract")
-            util.safe_remove_dir(extract_dir)
-            os.makedirs(extract_dir, exist_ok=True)
-            tar.extractall(extract_dir)
+        # Extract uv binary (zip on Windows, tar.* elsewhere) into a temporary directory
+        extract_dir = os.path.join(tmp_dir, "uv-extract")
+        util.safe_remove_dir(extract_dir)
+        os.makedirs(extract_dir, exist_ok=True)
+        if util.IS_WINDOWS:
+            import zipfile
+            with zipfile.ZipFile(uv_archive_path) as zf:
+                for m in zf.infolist():
+                    dest = os.path.abspath(os.path.join(extract_dir, m.filename))
+                    if not dest.startswith(os.path.abspath(extract_dir) + os.sep):
+                        raise exception.PIOInstallerException("Unsafe path in uv archive (zip)")
+                zf.extractall(extract_dir)
+        else:
+            with tarfile.open(uv_archive_path, "r:*") as tar:
+                for m in tar.getmembers():
+                    dest = os.path.abspath(os.path.join(extract_dir, m.name))
+                    if not dest.startswith(os.path.abspath(extract_dir) + os.sep):
+                        raise exception.PIOInstallerException("Unsafe path in uv archive (tar)")
+                tar.extractall(extract_dir)
 
             # Find the uv binary in the extracted files
             uv_binary = None
@@ -102,7 +121,7 @@ def download_and_install_uv(cache_dir):
             log.debug("uv installed at %s", uv_dest)
             return uv_dest
 
-    except (requests.RequestException, tarfile.TarError, OSError) as e:
+    except (requests.RequestException, tarfile.TarError, OSError, exception.PIOInstallerException) as e:
         log.debug("Could not download or install uv: %s", str(e))
         return None
 
@@ -110,8 +129,8 @@ def download_and_install_uv(cache_dir):
 def get_uv_executable():
     """Get path to uv executable, download if needed."""
     # First try to find uv in PATH
-    uv_exe = util.where_is_program("uv")
-    if uv_exe:
+    uv_exe = shutil.which("uv")
+    if uv_exe and os.path.isfile(uv_exe):
         log.debug("Found uv in PATH: %s", uv_exe)
         return uv_exe
 
@@ -119,7 +138,7 @@ def get_uv_executable():
     cache_dir = core.get_cache_dir()
     cached_uv = os.path.join(cache_dir, "uv" + (".exe" if util.IS_WINDOWS else ""))
 
-    if os.path.isfile(cached_uv):
+    if os.path.isfile(cached_uv) and os.access(cached_uv, os.X_OK):
         log.debug("Found cached uv: %s", cached_uv)
         return cached_uv
 
@@ -192,7 +211,7 @@ def create_venv_with_uv(uv_exe, python_exe, penv_dir):
     try:
         # Create venv with uv
         cmd = [uv_exe, "venv", "--python", python_exe, penv_dir]
-        subprocess.check_call(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
 
         # Verify the venv was created
         expected_python = os.path.join(
@@ -201,7 +220,7 @@ def create_venv_with_uv(uv_exe, python_exe, penv_dir):
         if os.path.isfile(expected_python):
             log.debug("Successfully created venv at %s", penv_dir)
 
-            # Install uv into the venv using system uv
+            # Make uv CLI available inside the venv
             install_uv_in_venv_with_system_uv(uv_exe, penv_dir)
 
             return penv_dir
