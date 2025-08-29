@@ -16,6 +16,7 @@ Features
 Requirements
 ------------
 
+* Python 3.10 or newer
 * Internet connection for downloading packages
 
 Development
