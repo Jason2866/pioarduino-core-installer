@@ -23,7 +23,6 @@ __url__ = "https://github.com/pioarduino/pioarduino-core-installer"
 
 __author__ = "PlatformIO Labs and pioarduino"
 __contact__ = "https://discord.gg/Nutz9crnZr"
-__email__ = ""
 
 
 __license__ = "Apache-2.0"
