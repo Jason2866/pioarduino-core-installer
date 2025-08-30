@@ -119,13 +119,17 @@ def unpack_archive(src, dst):
         if sys.version_info >= (3, 12):
             fp.extractall(dst, filter="data")
         else:
+
             def _safe_members(tf):
                 dst_real = os.path.realpath(dst)
                 for m in tf.getmembers():
                     target = os.path.realpath(os.path.join(dst, m.name))
                     if not (target == dst_real or target.startswith(dst_real + os.sep)):
-                        raise tarfile.ExtractError(f"Blocked unsafe tar member: {m.name}")
+                        raise tarfile.ExtractError(
+                            f"Blocked unsafe tar member: {m.name}"
+                        )
                     yield m
+
             fp.extractall(dst, members=_safe_members(fp))
     return dst
 

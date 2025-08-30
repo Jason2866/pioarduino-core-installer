@@ -16,7 +16,7 @@ Features
 Requirements
 ------------
 
-* Python 3.6 or newer for install
+* Python 3.9 or newer for install
 * Internet connection for downloading packages
 
 Development
