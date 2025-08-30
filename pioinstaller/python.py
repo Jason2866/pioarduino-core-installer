@@ -220,7 +220,7 @@ def find_compatible_pythons(ignore_pythons=None, raise_exception=True):
         # If uv installation failed, raise the original error
         raise exception.IncompatiblePythonError(
             "Could not find compatible Python 3.10-3.13 in your system. "
-            "Attempted to install Python 3.13 using uv failed. "
+            "Attempt to install Python 3.13 using uv failed. "
             "Please install Python 3.10, 3.11, 3.12, or 3.13 manually and restart "
             "installation."
         )
