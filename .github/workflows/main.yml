@@ -5,10 +5,12 @@ on:
   push:
 
 
-jobs:
-  build:
-    strategy:
-      fail-fast: false
+ jobs:
+   build:
+    permissions:
+      contents: write
+     strategy:
+       fail-fast: false
       matrix:
         os: [ubuntu-latest, ubuntu-24.04-arm, windows-latest, macos-13, macos-latest]
         python-version: ["3.9", "3.10", "3.11", "3.12", "3.13"]
