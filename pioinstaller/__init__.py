@@ -13,8 +13,9 @@
 # limitations under the License.
 
 import logging.config
+from typing import Final
 
-__version__ = "1.3.0"
+__version__: Final[str] = "1.3.0"
 
 __title__ = "pioarduino-installer"
 __description__ = "An installer for PlatformIO pioarduino Core"
