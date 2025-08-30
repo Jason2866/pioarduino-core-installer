@@ -10,12 +10,10 @@ lint:
 	uv run pylint --rcfile=./.pylintrc ./pioinstaller
 
 isort:
-	uv run isort ./tests
-	uv run isort ./pioinstaller
+	uv run isort ./pioinstaller ./tests
 
 format:
-	uv run black ./pioinstaller
-	uv run black ./tests
+	uv run black ./pioinstaller ./tests
 
 test:
 	uv run pytest --verbose --capture=no --exitfirst tests
