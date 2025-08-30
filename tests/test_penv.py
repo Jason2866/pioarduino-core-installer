@@ -16,63 +16,71 @@ import json
 import os
 import subprocess
 
-from pioinstaller import __version__, penv, python, util
+import pytest
+
+from pioinstaller import __version__, penv, util
 
 
-def test_penv_with_default_python(pio_installer_script, tmpdir, monkeypatch):
-    monkeypatch.setattr(util, "get_installer_script", lambda: pio_installer_script)
-
+def test_penv_creation_with_uv(tmpdir):
+    """Test basic virtual environment creation using uv."""
     penv_dir = str(tmpdir.mkdir("penv"))
 
-    assert penv.create_core_penv(penv_dir=penv_dir)
+    assert penv.create_core_penv(penv_dir=penv_dir) == penv_dir
 
-    python_exe = os.path.join(
-        penv.get_penv_bin_dir(penv_dir), "python.exe" if util.IS_WINDOWS else "python"
-    )
-    assert (
-        subprocess.check_call([python_exe, pio_installer_script, "check", "python"])
-        == 0
-    )
+    # Verify the virtual environment was created
+    assert os.path.isdir(penv_dir)
+    bin_dir = penv.get_penv_bin_dir(penv_dir)
+    assert os.path.isdir(bin_dir)
+
+    python_exe = os.path.join(bin_dir, "python.exe" if util.IS_WINDOWS else "python")
+    assert os.path.isfile(python_exe)
+
+    # Check state file was created
     with open(os.path.join(penv_dir, "state.json")) as fp:
         json_info = json.load(fp)
         assert json_info.get("installer_version") == __version__
 
 
-def test_penv_with_downloadable_venv(pio_installer_script, tmpdir, monkeypatch):
-    monkeypatch.setattr(util, "get_installer_script", lambda: pio_installer_script)
+def test_uv_installed_in_penv(prepared_penv):
+    """Test that uv is properly installed and functional in the penv after creation."""
+    penv_dir = prepared_penv
+    # Check that uv binary exists in the penv
+    bin_dir = penv.get_penv_bin_dir(penv_dir)
+    uv_exe = os.path.join(bin_dir, "uv.exe" if util.IS_WINDOWS else "uv")
+    assert os.path.isfile(uv_exe), f"uv executable not found at {uv_exe}"
+    # Test that uv works by running 'uv help'
+    try:
+        result = subprocess.run(
+            [uv_exe, "help"], capture_output=True, text=True, check=True, timeout=10
+        )
+        print("\nUV Help Output:")
+        print(result.stdout)
+        assert "uv" in result.stdout.lower()
+        assert "help" in result.stdout.lower() or "usage" in result.stdout.lower()
+    except subprocess.CalledProcessError as e:
+        raise AssertionError(f"uv help command failed: {e}")
+    except subprocess.TimeoutExpired:
+        raise AssertionError("uv help command timed out")
 
-    penv_dir = str(tmpdir.mkdir("penv"))
 
-    python_exes = python.find_compatible_pythons()
-    if not python_exes:
-        raise Exception("Python executable not found.")
-    python_exe = python_exes[0]
+@pytest.fixture(scope="module")
+def prepared_penv(tmp_path_factory):
+    penv_dir = str(tmp_path_factory.mktemp("penv"))
+    result_dir = penv.create_core_penv(penv_dir=penv_dir)
+    assert result_dir == penv_dir
+    return penv_dir
 
-    assert penv.create_with_remote_venv(python_exe=python_exe, penv_dir=penv_dir)
 
-    python_exe = os.path.join(
-        penv.get_penv_bin_dir(penv_dir), "python.exe" if util.IS_WINDOWS else "python"
+def test_uv_help_in_existing_penv(prepared_penv):
+    """Test that uv works in an already existing penv (no creation in this test)."""
+    penv_dir = prepared_penv
+    bin_dir = penv.get_penv_bin_dir(penv_dir)
+    uv_exe = os.path.join(bin_dir, "uv.exe" if util.IS_WINDOWS else "uv")
+    assert os.path.isfile(uv_exe), f"uv executable not found at {uv_exe}"
+    result = subprocess.run(
+        [uv_exe, "help"], capture_output=True, text=True, check=True, timeout=10
     )
-    assert (
-        subprocess.check_call([python_exe, pio_installer_script, "check", "python"])
-        == 0
-    )
-
-
-def test_penv_with_portable_python(pio_installer_script, tmpdir, monkeypatch):
-    if not util.IS_WINDOWS:
-        return
-    monkeypatch.setattr(util, "get_installer_script", lambda: pio_installer_script)
-
-    penv_dir = str(tmpdir.mkdir("penv"))
-
-    python_exe = python.fetch_portable_python(os.path.dirname(penv_dir))
-    assert penv.create_virtualenv(python_exe=python_exe, penv_dir=penv_dir)
-
-    python_exe = os.path.join(
-        penv.get_penv_bin_dir(penv_dir), "python.exe" if util.IS_WINDOWS else "python"
-    )
-    assert (
-        subprocess.check_call([python_exe, pio_installer_script, "check", "python"])
-        == 0
-    )
+    print("\nUV Help Output (existing venv):")
+    print(result.stdout)
+    assert "uv" in result.stdout.lower()
+    assert "help" in result.stdout.lower() or "usage" in result.stdout.lower()

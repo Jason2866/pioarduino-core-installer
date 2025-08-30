@@ -14,16 +14,15 @@
 
 import logging.config
 
-VERSION = (1, 2, 3)
-__version__ = ".".join([str(s) for s in VERSION])
+__version__ = "1.3.0"
 
 __title__ = "pioarduino-installer"
 __description__ = "An installer for PlatformIO pioarduino Core"
 
-__url__ = "https://pioarduino.org"
+__url__ = "https://github.com/pioarduino/pioarduino-core-installer"
 
 __author__ = "PlatformIO Labs and pioarduino"
-__email__ = "contact@piolabs.com"
+__contact__ = "https://discord.gg/Nutz9crnZr"
 
 
 __license__ = "Apache-2.0"

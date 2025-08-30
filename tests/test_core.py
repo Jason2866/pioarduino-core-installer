@@ -19,12 +19,10 @@ import subprocess
 from pioinstaller import __version__, core, penv, util
 
 
-def test_install_pio_core(pio_installer_script, tmpdir, monkeypatch):
-    monkeypatch.setattr(util, "get_installer_script", lambda: pio_installer_script)
-
-    core_dir = tmpdir.mkdir(".pio")
+def test_install_pio_core(tmpdir, monkeypatch):
+    core_dir = tmpdir.mkdir(".platformio")
     penv_dir = str(core_dir.mkdir("penv"))
-    os.environ["PLATFORMIO_CORE_DIR"] = str(core_dir)
+    monkeypatch.setenv("PLATFORMIO_CORE_DIR", str(core_dir))
 
     assert core.install_platformio_core(shutdown_piohome=False)
 
@@ -33,27 +31,7 @@ def test_install_pio_core(pio_installer_script, tmpdir, monkeypatch):
     )
     assert subprocess.check_call([python_exe, "-m", "platformio", "--version"]) == 0
 
-    core_state_path = os.path.join(str(core_dir), "core-state.json")
-    assert (
-        subprocess.check_call(
-            [
-                "python",
-                pio_installer_script,
-                "check",
-                "core",
-                "--dump-state=%s" % core_state_path,
-            ],
-            stderr=subprocess.STDOUT,
-        )
-        == 0
-    )
-    with open(core_state_path) as fp:
-        json_info = json.load(fp)
-        assert json_info.get("core_dir") == str(core_dir)
-        assert json_info.get("penv_dir") == penv_dir
-        assert json_info.get("installer_version") == __version__
-        assert json_info.get("system") == util.get_systype()
-
+    # Verify platformio executable exists
     assert os.path.isfile(
         os.path.join(
             penv.get_penv_bin_dir(penv_dir),

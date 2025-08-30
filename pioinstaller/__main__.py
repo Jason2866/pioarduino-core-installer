@@ -36,18 +36,12 @@ log = logging.getLogger(__name__)
     multiple=True,
     help="A path to Python to be ignored (multiple options and unix wildcards are allowed)",
 )
-@click.option(
-    "--pypi-index-url",
-    help="Custom base URL of the Python Package Index (default `https://pypi.org/simple`)",
-)
 @click.pass_context
 def cli(
-    ctx, verbose, shutdown_piohome, dev, ignore_python, pypi_index_url
+    ctx, verbose, shutdown_piohome, dev, ignore_python
 ):  # pylint: disable=too-many-arguments,too-many-positional-arguments
     if verbose:
         logging.getLogger("pioinstaller").setLevel(logging.DEBUG)
-    if pypi_index_url:
-        os.environ["PIP_INDEX_URL"] = pypi_index_url
     ctx.obj["dev"] = dev
     if ctx.invoked_subcommand:
         return
@@ -90,7 +84,7 @@ def python():
             % (platform.python_version(), util.get_pythonexe_path()),
             fg="green",
         )
-    except (exception.IncompatiblePythonError, exception.PythonVenvModuleNotFound) as e:
+    except exception.IncompatiblePythonError as e:
         raise click.ClickException(
             "The Python %s (%s) interpreter is not compatible.\nReason: %s"
             % (platform.python_version(), util.get_pythonexe_path(), str(e))

@@ -1,0 +1,79 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "pioarduino-installer"
+dynamic = ["version"]
+description = "An installer for PlatformIO pioarduino Core"
+readme = { file = "README.rst", content-type = "text/x-rst" }
+license = {text = "Apache-2.0"}
+authors = [
+    {name = "PlatformIO Labs and pioarduino"}
+]
+keywords = ["platformio", "pioarduino", "installer", "iot", "embedded"]
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: Apache Software License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Software Development :: Embedded Systems",
+    "Topic :: System :: Installation/Setup",
+]
+requires-python = ">=3.10"
+dependencies = [
+    "click>=8.1.0",
+    "requests>=2.32,<3",
+    "colorama>=0.4.6",
+    "semantic-version>=2.10.0"
+]
+
+[project.scripts]
+pioinstaller = "pioinstaller.__main__:main"
+
+[project.urls]
+Homepage = "https://github.com/pioarduino/pioarduino-core-installer"
+Repository = "https://github.com/pioarduino/pioarduino-core-installer"
+Documentation = "https://github.com/pioarduino/pioarduino-core-installer#readme"
+"Bug Tracker" = "https://github.com/pioarduino/pioarduino-core-installer/issues"
+
+[tool.hatch.version]
+path = "pioinstaller/__init__.py"
+pattern = "__version__ = ['\"](?P<version>[^'\"]+)['\"]"
+
+[tool.hatch.build.targets.sdist]
+exclude = [
+    "/.github",
+    "/tests",
+    "/.gitignore",
+    "/tox.ini",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["pioinstaller"]
+
+[tool.black]
+line-length = 88
+target-version = ['py310']
+
+[tool.isort]
+profile = "black"
+line_length = 88
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+addopts = "-ra --verbose --capture=tee-sys"
+
+[dependency-groups]
+dev = [
+    "black>=25.1.0",
+    "isort>=5.12.0", 
+    "pylint>=3.3.8",
+    "pytest>=8.4.1",
+]

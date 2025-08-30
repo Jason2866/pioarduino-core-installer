@@ -18,7 +18,6 @@ import os
 import platform
 import re
 import shutil
-import stat
 import subprocess
 import sys
 import tarfile
@@ -47,11 +46,9 @@ def get_pythonexe_path():
 
 def expanduser(path):
     """
-    Be compatible with Python 3.8, on Windows skip HOME and check for USERPROFILE
+    Expand user home directory path.
     """
-    if not IS_WINDOWS or not path.startswith("~") or "USERPROFILE" not in os.environ:
-        return os.path.expanduser(path)
-    return os.environ["USERPROFILE"] + path[1:]
+    return os.path.expanduser(path)
 
 
 def has_non_ascii_char(text):
@@ -62,13 +59,11 @@ def has_non_ascii_char(text):
 
 
 def rmtree(path):
-    def _onerror(func, path, __):
-        st_mode = os.stat(path).st_mode
-        if st_mode & stat.S_IREAD:
-            os.chmod(path, st_mode | stat.S_IWRITE)
-        func(path)
-
-    return shutil.rmtree(path, onerror=_onerror)  # pylint: disable=deprecated-argument
+    """
+    Remove directory tree. Python 3.10+ handles
+    readonly files better on Windows.
+    """
+    return shutil.rmtree(path)
 
 
 def find_file(name, path):
@@ -80,7 +75,7 @@ def find_file(name, path):
 
 def safe_create_dir(path, raise_exception=False):
     try:
-        os.makedirs(path)
+        os.makedirs(path, exist_ok=True)
         return path
     except Exception as e:  # pylint: disable=broad-except
         if raise_exception:
@@ -137,7 +132,7 @@ def pepver_to_semver(pepver):
 
 
 def where_is_program(program, envpath=None):
-    env = os.environ
+    env = os.environ.copy()
     if envpath:
         env["PATH"] = envpath
 
@@ -150,8 +145,9 @@ def where_is_program(program, envpath=None):
             .decode()
             .strip()
         )
-        if os.path.isfile(result):
-            return result
+        first = result.splitlines()[0] if result else ""
+        if first and os.path.isfile(first):
+            return first
     except (subprocess.CalledProcessError, OSError):
         pass
 
