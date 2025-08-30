@@ -18,7 +18,6 @@ import os
 import platform
 import re
 import shutil
-import stat
 import subprocess
 import sys
 import tarfile
