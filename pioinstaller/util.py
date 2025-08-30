@@ -75,7 +75,7 @@ def find_file(name, path):
 
 def safe_create_dir(path, raise_exception=False):
     try:
-        os.makedirs(path)
+        os.makedirs(path, exist_ok=True)
         return path
     except Exception as e:  # pylint: disable=broad-except
         if raise_exception:
