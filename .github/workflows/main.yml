@@ -33,9 +33,9 @@ jobs:
       - name: Install dependencies with uv
         run: |
           uv sync --dev --frozen
-#      - name: Python Lint
-#        run: |
-#          uv run make lint
+      - name: Python Lint
+        run: |
+          uv run make lint
       - name: Integration Tests
         run: |
           uv run make test
