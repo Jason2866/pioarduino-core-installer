@@ -59,3 +59,11 @@ jobs:
             ~/.platformio/penv/bin/pio system info
           fi
         shell: bash
+      - name: Verify uv is installed in PlatformIO penv
+        run: |
+          if [ "$RUNNER_OS" == "Windows" ]; then
+            ~/.platformio/penv/Scripts/python -c "import uv, sys; print('uv', uv.__version__); print(sys.executable)"
+          else
+            ~/.platformio/penv/bin/python -c "import uv, sys; print('uv', uv.__version__); print(sys.executable)"
+          fi
+        shell: bash
