@@ -37,8 +37,8 @@ jobs:
       - name: Verify uv is installed in PlatformIO penv
         run: |
           if [ "$RUNNER_OS" == "Windows" ]; then
-            ~/.platformio/penv/Scripts/uv.exe --version
+            ~/.platformio/penv/Scripts/uv.exe --help
           else
-            ~/.platformio/penv/bin/uv --version
+            ~/.platformio/penv/bin/uv --help
           fi
         shell: bash
