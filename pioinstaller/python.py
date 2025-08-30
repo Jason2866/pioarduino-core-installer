@@ -257,6 +257,7 @@ def _is_python_compatible(python_exe):
         # Python version check using subprocess
         cmd = [
             python_exe,
+            "-S",
             "-c",
             "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')",
         ]
