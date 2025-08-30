@@ -21,6 +21,7 @@ import subprocess
 import tarfile
 import time
 import zipfile
+import stat
 
 import click
 import requests
