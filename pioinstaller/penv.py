@@ -63,7 +63,7 @@ def get_uv_platform():
             )
             if b"musl" in out:
                 plat = plat.replace("-unknown-linux-gnu", "-unknown-linux-musl")
-        except subprocess.CalledProcessError:
+        except (subprocess.CalledProcessError, FileNotFoundError, OSError):
             pass
     return plat
 
