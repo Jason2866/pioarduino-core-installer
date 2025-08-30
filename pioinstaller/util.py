@@ -132,7 +132,7 @@ def pepver_to_semver(pepver):
 
 
 def where_is_program(program, envpath=None):
-    env = os.environ
+    env = os.environ.copy()
     if envpath:
         env["PATH"] = envpath
 
@@ -145,8 +145,9 @@ def where_is_program(program, envpath=None):
             .decode()
             .strip()
         )
-        if os.path.isfile(result):
-            return result
+        first = result.splitlines()[0] if result else ""
+        if first and os.path.isfile(first):
+            return first
     except (subprocess.CalledProcessError, OSError):
         pass
 
