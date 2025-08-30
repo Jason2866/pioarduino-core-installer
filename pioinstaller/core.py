@@ -36,8 +36,6 @@ PIO_CORE_DEVELOP_URL = (
     "https://github.com/pioarduino/platformio-core/archive/pioarduino.zip"
 )
 
-_CACHED_RELEASE_URL = None
-
 
 def _get_release_url():
     """Resolve latest release zip URL lazily with fallback and cache."""
