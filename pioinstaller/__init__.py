@@ -19,10 +19,10 @@ __version__ = "1.3.0"
 __title__ = "pioarduino-installer"
 __description__ = "An installer for PlatformIO pioarduino Core"
 
-__url__ = "https://github.com/pioarduino"
+__url__ = "https://github.com/pioarduino/pioarduino-core-installer"
 
 __author__ = "PlatformIO Labs and pioarduino"
-__email__ = "contact@piolabs.com"
+__email__ = "https://discord.gg/Nutz9crnZr"
 
 
 __license__ = "Apache-2.0"
