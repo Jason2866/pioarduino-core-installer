@@ -25,7 +25,7 @@ def test_penv_creation_with_uv(tmpdir):
     """Test basic virtual environment creation using uv."""
     penv_dir = str(tmpdir.mkdir("penv"))
 
-    assert penv.create_core_penv(penv_dir=penv_dir)
+    assert penv.create_core_penv(penv_dir=penv_dir) == penv_dir
 
     # Verify the virtual environment was created
     assert os.path.isdir(penv_dir)
