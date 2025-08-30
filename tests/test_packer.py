@@ -58,7 +58,7 @@ def test_packer_creates_script():
         assert os.access(script_path, os.X_OK)
 
         # Verify it has content
-        with open(script_path, "r") as f:
+        with open(script_path, "r", encoding="utf-8") as f:
             content = f.read()
             assert len(content) > 1000  # Should be a substantial script
             assert "pioinstaller" in content  # Should contain our package
