@@ -160,7 +160,7 @@ def get_uv_executable():
     # Download and install uv
     uv_exe = download_and_install_uv(cache_dir)
     if uv_exe:
-        click.echo("uv has been successfully installed!")
+        log.info("uv installed at %s", uv_exe)
         return uv_exe
 
     return None
