@@ -40,8 +40,6 @@ def test_find_compatible_pythons():
     assert len(pythons) >= 1
 
     # All found pythons should be valid executables
-    import os
-
     for python_exe in pythons:
         assert os.path.isfile(python_exe)
         assert os.access(python_exe, os.X_OK)
