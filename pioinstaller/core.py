@@ -399,7 +399,6 @@ def auto_upgrade_core(platformio_exe, develop=False):
             f"{e.output.decode(errors='ignore') if hasattr(e, 'output') else str(e)}"
         )
         raise exception.PIOInstallerException(msg)
-    return False
 
 
 def dump_state(target, state):
