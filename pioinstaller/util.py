@@ -47,11 +47,9 @@ def get_pythonexe_path():
 
 def expanduser(path):
     """
-    Be compatible with Python 3.8, on Windows skip HOME and check for USERPROFILE
+    Expand user home directory path.
     """
-    if not IS_WINDOWS or not path.startswith("~") or "USERPROFILE" not in os.environ:
-        return os.path.expanduser(path)
-    return os.environ["USERPROFILE"] + path[1:]
+    return os.path.expanduser(path)
 
 
 def has_non_ascii_char(text):
@@ -80,7 +78,7 @@ def find_file(name, path):
 
 def safe_create_dir(path, raise_exception=False):
     try:
-        os.makedirs(path)
+        os.makedirs(path, exist_ok=True)
         return path
     except Exception as e:  # pylint: disable=broad-except
         if raise_exception:
@@ -90,24 +88,49 @@ def safe_create_dir(path, raise_exception=False):
 
 def download_file(url, dst, cache=True):
     if cache:
-        content_length = requests.head(url, timeout=10).headers.get("Content-Length")
-        if os.path.isfile(dst) and content_length == os.path.getsize(dst):
-            log.debug("Getting from cache: %s", dst)
-            return dst
+        try:
+            head = requests.head(url, allow_redirects=True, timeout=10)
+            head.raise_for_status()
+            content_length = head.headers.get("Content-Length")
+            if (
+                os.path.isfile(dst)
+                and content_length is not None
+                and int(content_length) == os.path.getsize(dst)
+            ):
+                log.debug("Getting from cache: %s", dst)
+                return dst
+        except Exception as e:  # pylint: disable=broad-except
+            log.debug("HEAD request failed for %s: %r; falling back to GET", url, e)
 
-    resp = requests.get(url, stream=True, timeout=10)
+    resp = requests.get(url, stream=True, timeout=30)
+    resp.raise_for_status()
     itercontent = resp.iter_content(chunk_size=io.DEFAULT_BUFFER_SIZE)
     safe_create_dir(os.path.dirname(dst))
     with open(dst, "wb") as fp:
         for chunk in itercontent:
-            fp.write(chunk)
+            if chunk:  # skip keep-alive chunks
+                fp.write(chunk)
     return dst
 
 
 def unpack_archive(src, dst):
     assert src.endswith("tar.gz")
     with tarfile.open(src, mode="r:gz") as fp:
-        fp.extractall(dst)
+        if sys.version_info >= (3, 12):
+            fp.extractall(dst, filter="data")
+        else:
+
+            def _safe_members(tf):
+                dst_real = os.path.realpath(dst)
+                for m in tf.getmembers():
+                    target = os.path.realpath(os.path.join(dst, m.name))
+                    if not (target == dst_real or target.startswith(dst_real + os.sep)):
+                        raise tarfile.ExtractError(
+                            f"Blocked unsafe tar member: {m.name}"
+                        )
+                    yield m
+
+            fp.extractall(dst, members=_safe_members(fp))
     return dst
 
 
@@ -137,7 +160,7 @@ def pepver_to_semver(pepver):
 
 
 def where_is_program(program, envpath=None):
-    env = os.environ
+    env = os.environ.copy()
     if envpath:
         env["PATH"] = envpath
 
@@ -150,8 +173,9 @@ def where_is_program(program, envpath=None):
             .decode()
             .strip()
         )
-        if os.path.isfile(result):
-            return result
+        first = result.splitlines()[0] if result else ""
+        if first and os.path.isfile(first):
+            return first
     except (subprocess.CalledProcessError, OSError):
         pass
 

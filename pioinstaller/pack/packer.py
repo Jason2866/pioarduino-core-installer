@@ -25,7 +25,12 @@ from pioinstaller import util
 
 
 def create_wheels(package_dir, dest_dir):
-    subprocess.call(["pip", "wheel", "--wheel-dir", dest_dir, "."], cwd=package_dir)
+    # Use uv to install dependencies and pip, then create wheels
+    subprocess.call(["uv", "sync"], cwd=package_dir)
+    subprocess.call(["uv", "pip", "install", "pip", "wheel"], cwd=package_dir)
+    subprocess.call(
+        ["uv", "run", "pip", "wheel", "--wheel-dir", dest_dir, "."], cwd=package_dir
+    )
 
 
 def pack(target):
@@ -40,13 +45,18 @@ def pack(target):
     create_wheels(os.path.dirname(util.get_source_dir()), tmp_dir)
 
     new_data = io.BytesIO()
-    for whl in os.listdir(tmp_dir):
-        with zipfile.ZipFile(os.path.join(tmp_dir, whl)) as existing_zip:
+    for filename in os.listdir(tmp_dir):
+        if not filename.endswith(".whl"):
+            continue
+        filepath = os.path.join(tmp_dir, filename)
+        with zipfile.ZipFile(filepath) as existing_zip:
             with zipfile.ZipFile(new_data, mode="a") as new_zip:
                 for zinfo in existing_zip.infolist():
-                    if re.search(r"\.dist-info/", zinfo.filename):
-                        continue
-                    new_zip.writestr(zinfo, existing_zip.read(zinfo))
+                    # Keep some metadata for packages that need it like semantic_version
+                    if re.search(r"\.dist-info/(METADATA|PKG-INFO)$", zinfo.filename):
+                        new_zip.writestr(zinfo, existing_zip.read(zinfo))
+                    elif not re.search(r"\.dist-info/", zinfo.filename):
+                        new_zip.writestr(zinfo, existing_zip.read(zinfo))
     zipdata = base64.b64encode(new_data.getvalue()).decode("utf8")
     with open(target, "w") as fp:
         with open(os.path.join(util.get_source_dir(), "pack", "template.py")) as fptlp:
