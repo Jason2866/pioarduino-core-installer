@@ -61,20 +61,10 @@ def has_non_ascii_char(text):
 
 def rmtree(path):
     """
-    Remove directory tree. In Python 3.10+, shutil.rmtree handles
+    Remove directory tree. Python 3.10+ handles
     readonly files better on Windows.
     """
-    try:
-        # Try the simple approach first - works well in Python 3.10+
-        return shutil.rmtree(path)
-    except PermissionError:
-        # Fallback for stubborn readonly files on Windows
-        def handle_remove_readonly(func, path, exc):
-            if exc[1].errno == 13:  # Permission denied
-                os.chmod(path, stat.S_IWRITE)
-                func(path)
-
-        return shutil.rmtree(path, onerror=handle_remove_readonly)
+    return shutil.rmtree(path)
 
 
 def find_file(name, path):
