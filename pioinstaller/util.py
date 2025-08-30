@@ -98,7 +98,6 @@ def download_file(url, dst, cache=True):
                 return dst
         except Exception as e:  # pylint: disable=broad-except
             log.debug("HEAD request failed for %s: %r; falling back to GET", url, e)
-            pass
 
     resp = requests.get(url, stream=True, timeout=30)
     resp.raise_for_status()
