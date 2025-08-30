@@ -45,6 +45,10 @@ jobs:
       - name: Pack Installer Script
         run: |
           uv run make pack
+      - name: Copy Installer Script to Parent Directory
+        run: |
+          cp -r dist/*.py ../
+        shell: bash
       - name: Commit changed `get-platformio.py`
         if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.13'
         uses: stefanzweifel/git-auto-commit-action@v5
