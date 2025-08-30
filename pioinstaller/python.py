@@ -158,12 +158,11 @@ def check():
             % util.get_pythonexe_path(),
         )
 
-    try:
-        assert os.path.isdir(os.path.join(sys.prefix, "Scripts"))
-    except AssertionError as exc:
+    scripts_dir = os.path.join(sys.prefix, "Scripts")
+    if not os.path.isdir(scripts_dir):
         raise exception.IncompatiblePythonError(
             "Unsupported python without 'Scripts' folder"
-        ) from exc
+        )
 
     return True
 
