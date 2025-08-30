@@ -6,7 +6,7 @@ build-backend = "hatchling.build"
 name = "pioarduino-installer"
 dynamic = ["version"]
 description = "An installer for PlatformIO pioarduino Core"
-readme = "README.rst"
+readme = { file = "README.rst", content-type = "text/x-rst" }
 license = {text = "Apache-2.0"}
 authors = [
     {name = "PlatformIO Labs and pioarduino"}
@@ -28,7 +28,7 @@ classifiers = [
 requires-python = ">=3.10"
 dependencies = [
     "click>=8.1.0",
-    "requests>=2.32.0",
+    "requests>=2.32,<3",
     "colorama>=0.4.6",
     "semantic-version>=2.10.0"
 ]
@@ -37,9 +37,9 @@ dependencies = [
 pioinstaller = "pioinstaller.__main__:main"
 
 [project.urls]
-Homepage = "https://github.com/pioarduino"
+Homepage = "https://github.com/pioarduino/pioarduino-core-installer"
 Repository = "https://github.com/pioarduino/pioarduino-core-installer"
-Documentation = "https://github.com/pioarduino"
+Documentation = "https://github.com/pioarduino/pioarduino-core-installer#readme"
 "Bug Tracker" = "https://github.com/pioarduino/pioarduino-core-installer/issues"
 
 [tool.hatch.version]
@@ -68,7 +68,7 @@ line_length = 88
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 python_files = ["test_*.py"]
-addopts = "--verbose --capture=no"
+addopts = "-ra --verbose --capture=tee-sys"
 
 [dependency-groups]
 dev = [
