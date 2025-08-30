@@ -44,11 +44,15 @@ def get_uv_platform():
         ("Darwin", "arm64"): "aarch64-apple-darwin",
         ("Linux", "x86_64"): "x86_64-unknown-linux-gnu",
         ("Linux", "aarch64"): "aarch64-unknown-linux-gnu",
+        ("Linux", "i686"): "i686-unknown-linux-gnu",
         ("Linux", "armv7l"): "armv7-unknown-linux-gnueabihf",
     }
 
     system = platform.system()
     machine = platform.machine()
+    # normalize common variations
+    if machine.lower() in ("x86_64", "amd64"):
+        machine = "x86_64" if system != "Windows" else "AMD64"
 
     # Handle different arm64 representations on macOS
     if system == "Darwin" and machine in ("arm64", "aarch64"):
