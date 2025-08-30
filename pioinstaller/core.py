@@ -45,8 +45,14 @@ def _get_release_url():
     if hasattr(_get_release_url, "_cache"):
         return _get_release_url._cache
     try:
-        import requests  # noqa: WPS433
+        import requests
+    except ImportError as exc:
+        log.debug("Falling back to pinned core URL due to missing requests: %s", exc)
+        url = "https://github.com/pioarduino/platformio-core/archive/refs/tags/v6.1.18.zip"
+        _get_release_url._cache = url
+        return url
 
+    try:
         resp = requests.get(PIO_CORE_API_URL, timeout=5)
         resp.raise_for_status()
         tag_name = resp.json().get("tag_name")
