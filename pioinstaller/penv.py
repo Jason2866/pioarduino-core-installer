@@ -72,18 +72,20 @@ def _extract_uv_archive(archive_path, extract_dir):
     """Extract uv archive to extract_dir and check for unsafe paths."""
     if util.IS_WINDOWS:
         with zipfile.ZipFile(archive_path) as zf:
+            base = os.path.abspath(extract_dir) + os.sep
             for m in zf.infolist():
                 dest = os.path.abspath(os.path.join(extract_dir, m.filename))
-                if not dest.startswith(os.path.abspath(extract_dir) + os.sep):
+                if not dest.startswith(base):
                     raise exception.PIOInstallerException("Unsafe path in archive")
-            zf.extractall(extract_dir)
+                zf.extract(m, extract_dir)
     else:
         with tarfile.open(archive_path, "r:*") as tar:
+            base = os.path.abspath(extract_dir) + os.sep
             for m in tar.getmembers():
                 dest = os.path.abspath(os.path.join(extract_dir, m.name))
-                if not dest.startswith(os.path.abspath(extract_dir) + os.sep):
+                if not dest.startswith(base):
                     raise exception.PIOInstallerException("Unsafe path in archive")
-            tar.extractall(extract_dir)
+                tar.extract(m, extract_dir)
 
 
 def _find_uv_binary(extract_dir):
@@ -196,11 +198,6 @@ def create_core_penv(penv_dir=None, ignore_pythons=None):
         result_dir = create_venv_with_uv(uv_exe, python_exe, penv_dir)
         if result_dir:
             break
-
-    if not result_dir and not python.is_portable():
-        python_exe = python.fetch_portable_python(os.path.dirname(penv_dir))
-        if python_exe:
-            result_dir = create_venv_with_uv(uv_exe, python_exe, penv_dir)
 
     if not result_dir:
         raise exception.PIOInstallerException(
