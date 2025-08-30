@@ -92,9 +92,10 @@ def fetch_portable_python(_dst):
         # Find the installed Python 3.13 executable
         cmd = ["uv", "python", "find", "3.13"]
         result = subprocess.check_output(cmd, stderr=subprocess.DEVNULL)
-        python_exe = result.decode().strip()
+        candidates = [l.strip() for l in result.decode().splitlines() if l.strip()]
+        python_exe = next((p for p in candidates if os.path.isfile(p)), "")
 
-        if python_exe and os.path.isfile(python_exe):
+        if python_exe and os.access(python_exe, os.X_OK):
             log.debug("Python 3.13 installation completed: %s", python_exe)
             return python_exe
 
