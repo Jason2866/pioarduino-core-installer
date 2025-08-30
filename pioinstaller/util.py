@@ -120,8 +120,8 @@ def unpack_archive(src, dst):
                 dst_real = os.path.realpath(dst)
                 for m in tf.getmembers():
                     target = os.path.realpath(os.path.join(dst, m.name))
-                    if not target.startswith(dst_real + os.sep):
-                        raise Exception(f"Blocked unsafe tar member: {m.name}")  # pylint: disable=broad-except
+                    if not (target == dst_real or target.startswith(dst_real + os.sep)):
+                        raise tarfile.ExtractError(f"Blocked unsafe tar member: {m.name}")
                     yield m
             fp.extractall(dst, members=_safe_members(fp))
     return dst
