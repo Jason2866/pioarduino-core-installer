@@ -59,11 +59,13 @@ def has_non_ascii_char(text):
 
 
 def rmtree(path):
-    """
-    Remove directory tree. Python 3.10+ handles
-    readonly files better on Windows.
-    """
-    return shutil.rmtree(path)
+    def _onerror(func, path, __):
+        st_mode = os.stat(path).st_mode
+        if st_mode & stat.S_IREAD:
+            os.chmod(path, st_mode | stat.S_IWRITE)
+        func(path)
+
+    return shutil.rmtree(path, onerror=_onerror)  # pylint: disable=deprecated-argument
 
 
 def find_file(name, path):
