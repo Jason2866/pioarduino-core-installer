@@ -191,7 +191,7 @@ def _install_with_uv(uv_exe, penv_dir, develop):
             )
         raise exception.PIOInstallerException(
             "Could not install pioarduino Core with uv: %s" % error
-        )
+        ) from e
 
 
 def _post_install_message(penv_dir):
