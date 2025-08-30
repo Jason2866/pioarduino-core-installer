@@ -398,7 +398,7 @@ def auto_upgrade_core(platformio_exe, develop=False):
             "Could not upgrade pioarduino Core: "
             f"{e.output.decode(errors='ignore') if hasattr(e, 'output') else str(e)}"
         )
-        raise exception.PIOInstallerException(msg)
+        raise exception.PIOInstallerException(msg) from e
 
 
 def dump_state(target, state):
