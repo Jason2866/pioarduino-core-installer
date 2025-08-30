@@ -253,7 +253,7 @@ dev = [
 requires-dist = [
     { name = "click", specifier = ">=8.1.0" },
     { name = "colorama", specifier = ">=0.4.6" },
-    { name = "requests", specifier = ">=2.32.0" },
+    { name = "requests", specifier = ">=2.32,<3" },
     { name = "semantic-version", specifier = ">=2.10.0" },
 ]
 
