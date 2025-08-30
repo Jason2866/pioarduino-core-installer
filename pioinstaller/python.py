@@ -189,12 +189,13 @@ def find_compatible_pythons(ignore_pythons=None, raise_exception=True):
     if util.IS_WINDOWS:
         exenames = ["%s.exe" % item for item in exenames]
 
-    log.debug("Current environment PATH %s", os.getenv("PATH"))
+    log.debug("Current environment PATH %s", os.getenv("PATH") or "")
     candidates = _get_python_candidates(exenames)
 
     result = []
+    norm_ign = {os.path.normcase(os.path.normpath(p)) for p in ignore_list}
     for item in candidates:
-        if item in ignore_list:
+        if os.path.normcase(os.path.normpath(item)) in norm_ign:
             continue
         log.debug("Checking a Python candidate %s", item)
         if _is_python_compatible(item):
