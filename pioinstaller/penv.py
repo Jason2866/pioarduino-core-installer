@@ -101,10 +101,10 @@ def get_uv_platform():
 
 def detect_musl():
     """Detect musl libc more robustly."""
+    ldd_path = shutil.which("ldd")
     methods = [
-        lambda: b"musl" in subprocess.check_output(
-            ["ldd", "--version"], stderr=subprocess.STDOUT
-        ),
+        lambda: bool(ldd_path)
+        and b"musl" in subprocess.check_output([ldd_path, "--version"], stderr=subprocess.STDOUT),
         lambda: os.path.exists("/lib/libc.musl-x86_64.so.1"),
         lambda: "musl" in os.environ.get("LD_LIBRARY_PATH", ""),
     ]
@@ -135,7 +135,7 @@ def _parse_digest_string(digest_str):
     if algorithm.lower() != "sha256":
         return None
 
-    return hash_value.strip()
+    return hash_value.strip().lower()
 
 
 def fetch_uv_checksums_from_github():
@@ -192,8 +192,11 @@ def verify_download(file_path, expected_sha256):
         with open(file_path, "rb") as f:
             for chunk in iter(lambda: f.read(4096), b""):
                 sha256_hash.update(chunk)
-        calculated_hash = sha256_hash.hexdigest()
-        is_valid = calculated_hash == expected_sha256
+        calculated_hash = sha256_hash.hexdigest().lower()
+        expected = (expected_sha256 or "").strip().lower()
+        if ":" in expected:
+            expected = expected.split(":", 1)[1]
+        is_valid = calculated_hash == expected
         if not is_valid:
             log.error("Checksum mismatch for %s: expected %s, got %s",
                       os.path.basename(file_path), expected_sha256,
@@ -201,7 +204,7 @@ def verify_download(file_path, expected_sha256):
         else:
             log.debug("Checksum verified for %s", os.path.basename(file_path))
         return is_valid
-    except OSError as e:
+    except OSError:
         log.exception("Failed to verify checksum for %s",
                       os.path.basename(file_path))
         return False
@@ -456,8 +459,8 @@ def create_venv_with_uv(uv_exe, python_exe, penv_dir):
     except OSError as e:
         log.debug("OS error creating venv with uv: %s", str(e))
         return None
-    except Exception as e:
-        log.error("Unexpected error creating venv with uv: %s", str(e))
+    except Exception:
+        log.exception("Unexpected error creating venv with uv")
         raise
 
 
@@ -508,7 +511,7 @@ def init_state(python_exe, penv_dir):
             .strip()
         )
     except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as e:
-        log.error("Failed to get python version: %s", e)
+        log.exception("Failed to get python version")
         raise exception.PIOInstallerException(
             "Could not determine python version") from e
 
