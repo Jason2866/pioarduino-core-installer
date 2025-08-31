@@ -199,7 +199,7 @@ def verify_download(file_path, expected_sha256):
         is_valid = calculated_hash == expected
         if not is_valid:
             log.error("Checksum mismatch for %s: expected %s, got %s",
-                      os.path.basename(file_path), expected_sha256,
+                      os.path.basename(file_path), expected,
                       calculated_hash)
         else:
             log.debug("Checksum verified for %s", os.path.basename(file_path))
