@@ -116,10 +116,37 @@ def detect_musl():
     return False
 
 
+def _parse_digest_string(digest_str):
+    """Parse digest string from GitHub API.
+    
+    GitHub returns digest as string like 'sha256:abc123...'
+    Parse and return the hash value if it's SHA256.
+    """
+    if not digest_str or not isinstance(digest_str, str):
+        return None
+    
+    parts = digest_str.split(":", 1)
+    if len(parts) != 2:
+        return None
+    
+    algorithm, hash_value = parts
+    if algorithm.lower() != "sha256":
+        return None
+    
+    return hash_value.strip()
+
+
 def fetch_uv_checksums_from_github():
     """Fetch SHA256 checksums from GitHub API."""
+    # Set proper headers for GitHub API stability
+    headers = {
+        "Accept": "application/vnd.github+json",
+        "User-Agent": f"PlatformIO-Installer/{__version__}",
+        "X-GitHub-Api-Version": "2022-11-28"
+    }
+    
     try:
-        response = requests.get(UV_API_URL, timeout=30)
+        response = requests.get(UV_API_URL, headers=headers, timeout=30)
         response.raise_for_status()
         release_data = response.json()
 
@@ -127,15 +154,19 @@ def fetch_uv_checksums_from_github():
         for asset in release_data.get("assets", []):
             asset_name = asset.get("name", "")
             if asset_name.endswith((".tar.gz", ".zip")):
-                # GitHub now provides SHA256 digests in the API response
-                digest = asset.get("digest", {}).get("sha256")
-                if digest:
-                    checksums[asset_name] = digest
+                # GitHub digest is a string like "sha256:abc123..."
+                digest_str = asset.get("digest")
+                digest_hash = _parse_digest_string(digest_str)
+                if digest_hash:
+                    checksums[asset_name] = digest_hash
+                    log.debug("Found checksum for %s: %s", asset_name,
+                             digest_hash[:16] + "...")
 
         log.debug("Fetched checksums for %d assets", len(checksums))
         return checksums
 
-    except (requests.RequestException, json.JSONDecodeError, KeyError) as e:
+    except (requests.RequestException, json.JSONDecodeError, KeyError,
+            AttributeError) as e:
         log.warning("Failed to fetch checksums from GitHub API: %s", e)
         return {}
 
