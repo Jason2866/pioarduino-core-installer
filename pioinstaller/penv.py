@@ -91,9 +91,11 @@ def get_uv_platform():
     key = (system, machine)
     plat = platform_map.get(key)
     # Detect musl on Linux
-    if system == "Linux" and plat and "-unknown-linux-gnu" in plat:
-        if detect_musl():
+    if system == "Linux" and plat and detect_musl():
+        if plat.endswith("-unknown-linux-gnu"):
             plat = plat.replace("-unknown-linux-gnu", "-unknown-linux-musl")
+        elif plat.endswith("-unknown-linux-gnueabihf"):
+            plat = plat.replace("gnueabihf", "musleabihf")
     return plat
 
 
@@ -200,8 +202,8 @@ def verify_download(file_path, expected_sha256):
             log.debug("Checksum verified for %s", os.path.basename(file_path))
         return is_valid
     except OSError as e:
-        log.error("Failed to verify checksum for %s: %s",
-                  os.path.basename(file_path), e)
+        log.exception("Failed to verify checksum for %s",
+                      os.path.basename(file_path))
         return False
 
 
@@ -336,6 +338,7 @@ def download_and_install_uv(cache_dir, retries=DEFAULT_RETRIES,
         except OSError:
             pass
 
+    log.error("Failed to download/install uv after %d attempts", retries)
     return None
 
 
