@@ -47,14 +47,21 @@ UV_EXE = "uv.exe" if util.IS_WINDOWS else "uv"
 
 class DownloadConfig:
     """Configuration class for download parameters."""
-    
-    def __init__(self, uv_url, archive_path, uv_platform, ext,
-                 expected_checksum=None):
+
+    def __init__(self, uv_url, archive_path, uv_platform, ext):
         self.uv_url = uv_url
         self.archive_path = archive_path
         self.uv_platform = uv_platform
         self.ext = ext
-        self.expected_checksum = expected_checksum
+        self.expected_checksum = None
+
+    def set_checksum(self, checksum):
+        """Set the expected checksum for verification."""
+        self.expected_checksum = checksum
+
+    def is_checksum_available(self):
+        """Check if checksum is available for verification."""
+        return self.expected_checksum is not None
 
 
 def get_uv_platform():
@@ -240,7 +247,7 @@ def _attempt_download(config, attempt, retries):
         util.download_file(config.uv_url, config.archive_path)
 
         # Verify checksum from GitHub API
-        if config.expected_checksum:
+        if config.is_checksum_available():
             if not verify_download(config.archive_path,
                                  config.expected_checksum):
                 raise exception.PIOInstallerException(
@@ -278,9 +285,8 @@ def download_and_install_uv(cache_dir, retries=DEFAULT_RETRIES,
     archive_path, extract_dir = _prepare_download_dirs(
         cache_dir, uv_platform, ext)
 
-    expected_checksum = get_expected_checksum(uv_platform, ext)
-    config = DownloadConfig(uv_url, archive_path, uv_platform, ext,
-                          expected_checksum)
+    config = DownloadConfig(uv_url, archive_path, uv_platform, ext)
+    config.set_checksum(get_expected_checksum(uv_platform, ext))
 
     for attempt in range(1, retries + 1):
         if not _attempt_download(config, attempt, retries):
