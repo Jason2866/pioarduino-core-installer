@@ -22,11 +22,11 @@ import subprocess
 import tarfile
 import time
 import zipfile
+from dataclasses import dataclass
 
 import click
 import requests
 
-from dataclasses import dataclass
 from pioinstaller import __version__, core, exception, python, util
 
 log = logging.getLogger(__name__)
