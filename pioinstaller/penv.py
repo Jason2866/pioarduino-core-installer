@@ -45,6 +45,18 @@ BIN_DIR = "Scripts" if util.IS_WINDOWS else "bin"
 UV_EXE = "uv.exe" if util.IS_WINDOWS else "uv"
 
 
+class DownloadConfig:
+    """Configuration class for download parameters."""
+    
+    def __init__(self, uv_url, archive_path, uv_platform, ext,
+                 expected_checksum=None):
+        self.uv_url = uv_url
+        self.archive_path = archive_path
+        self.uv_platform = uv_platform
+        self.ext = ext
+        self.expected_checksum = expected_checksum
+
+
 def get_uv_platform():
     """Get the uv platform identifier for the current system."""
     platform_map = {
@@ -188,11 +200,10 @@ def _find_uv_binary(extract_dir):
 
 def _prepare_download_dirs(cache_dir, uv_platform, ext):
     """Prepare directories and paths for download."""
-    tmp_dir = os.path.join(cache_dir, "tmp")
-    os.makedirs(tmp_dir, exist_ok=True)
-    uv_archive_path = os.path.join(tmp_dir, f"uv-{uv_platform}.{ext}")
-    extract_dir = os.path.join(tmp_dir, "uv-extract")
-    return tmp_dir, uv_archive_path, extract_dir
+    os.makedirs(os.path.join(cache_dir, "tmp"), exist_ok=True)
+    archive_path = os.path.join(cache_dir, "tmp", f"uv-{uv_platform}.{ext}")
+    extract_dir = os.path.join(cache_dir, "tmp", "uv-extract")
+    return archive_path, extract_dir
 
 
 def _process_downloaded_archive(archive_path, extract_dir, cache_dir):
@@ -200,76 +211,38 @@ def _process_downloaded_archive(archive_path, extract_dir, cache_dir):
     util.safe_remove_dir(extract_dir)
     os.makedirs(extract_dir, exist_ok=True)
     _extract_uv_archive(archive_path, extract_dir)
-    
+
     uv_binary = _find_uv_binary(extract_dir)
     if not uv_binary:
         raise exception.PIOInstallerException(
             "Could not find uv binary in downloaded archive"
         )
-    
+
     uv_dest = os.path.join(cache_dir, UV_EXE)
     shutil.copy2(uv_binary, uv_dest)
     if not util.IS_WINDOWS:
         os.chmod(uv_dest, 0o755)
-    
+
     log.debug("uv installed at %s", uv_dest)
     return uv_dest
 
 
-def download_and_install_uv(cache_dir, retries=DEFAULT_RETRIES,
-                          retry_delay=DEFAULT_RETRY_DELAY):
-    """Download and install uv package manager with retry on failure."""
-    uv_platform = get_uv_platform()
-    if not uv_platform:
-        raise exception.PIOInstallerException(
-            f"Unsupported OS/architecture for uv: "
-            f"{platform.system()}/{platform.machine()}"
-        )
-    
-    ext = "zip" if util.IS_WINDOWS else "tar.gz"
-    uv_url = UV_URL.format(platform=uv_platform, ext=ext)
-    
-    tmp_dir, archive_path, extract_dir = _prepare_download_dirs(
-        cache_dir, uv_platform, ext)
-
-    for attempt in range(1, retries + 1):
-        if not _attempt_download(uv_url, archive_path, extract_dir, cache_dir,
-                               uv_platform, ext, attempt, retries):
-            if attempt < retries:
-                actual_delay = retry_delay * (2 ** (attempt - 1))
-                log.debug("Retrying in %d seconds...", actual_delay)
-                time.sleep(actual_delay)
-            continue
-        return _process_downloaded_archive(archive_path, extract_dir,
-                                         cache_dir)
-
-    # Clean up on final failure
-    if os.path.exists(archive_path):
-        try:
-            os.remove(archive_path)
-        except OSError:
-            pass
-
-    return None
-
-
-def _attempt_download(uv_url, archive_path, extract_dir, cache_dir,
-                     uv_platform, ext, attempt, retries):
+def _attempt_download(config, attempt, retries):
     """Attempt a single download with checksum verification."""
     try:
         log.debug("Downloading uv from %s (attempt %d/%d)",
-                 uv_url, attempt, retries)
+                 config.uv_url, attempt, retries)
 
         # Remove potentially corrupted file from previous attempt
-        if os.path.exists(archive_path):
-            os.remove(archive_path)
+        if os.path.exists(config.archive_path):
+            os.remove(config.archive_path)
 
-        util.download_file(uv_url, archive_path)
+        util.download_file(config.uv_url, config.archive_path)
 
         # Verify checksum from GitHub API
-        expected_checksum = get_expected_checksum(uv_platform, ext)
-        if expected_checksum:
-            if not verify_download(archive_path, expected_checksum):
+        if config.expected_checksum:
+            if not verify_download(config.archive_path,
+                                 config.expected_checksum):
                 raise exception.PIOInstallerException(
                     "Downloaded uv archive failed checksum verification"
                 )
@@ -287,6 +260,46 @@ def _attempt_download(uv_url, archive_path, extract_dir, cache_dir,
     ) as e:
         log.debug("Attempt %d/%d failed: %s", attempt, retries, str(e))
         return False
+
+
+def download_and_install_uv(cache_dir, retries=DEFAULT_RETRIES,
+                          retry_delay=DEFAULT_RETRY_DELAY):
+    """Download and install uv package manager with retry on failure."""
+    uv_platform = get_uv_platform()
+    if not uv_platform:
+        raise exception.PIOInstallerException(
+            f"Unsupported OS/architecture for uv: "
+            f"{platform.system()}/{platform.machine()}"
+        )
+
+    ext = "zip" if util.IS_WINDOWS else "tar.gz"
+    uv_url = UV_URL.format(platform=uv_platform, ext=ext)
+
+    archive_path, extract_dir = _prepare_download_dirs(
+        cache_dir, uv_platform, ext)
+
+    expected_checksum = get_expected_checksum(uv_platform, ext)
+    config = DownloadConfig(uv_url, archive_path, uv_platform, ext,
+                          expected_checksum)
+
+    for attempt in range(1, retries + 1):
+        if not _attempt_download(config, attempt, retries):
+            if attempt < retries:
+                actual_delay = retry_delay * (2 ** (attempt - 1))
+                log.debug("Retrying in %d seconds...", actual_delay)
+                time.sleep(actual_delay)
+            continue
+        return _process_downloaded_archive(archive_path, extract_dir,
+                                         cache_dir)
+
+    # Clean up on final failure
+    if os.path.exists(archive_path):
+        try:
+            os.remove(archive_path)
+        except OSError:
+            pass
+
+    return None
 
 
 def get_uv_executable():
