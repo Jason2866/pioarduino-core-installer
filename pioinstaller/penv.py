@@ -124,15 +124,15 @@ def _parse_digest_string(digest_str):
     """
     if not digest_str or not isinstance(digest_str, str):
         return None
-    
+
     parts = digest_str.split(":", 1)
     if len(parts) != 2:
         return None
-    
+
     algorithm, hash_value = parts
     if algorithm.lower() != "sha256":
         return None
-    
+
     return hash_value.strip()
 
 
@@ -144,7 +144,7 @@ def fetch_uv_checksums_from_github():
         "User-Agent": f"PlatformIO-Installer/{__version__}",
         "X-GitHub-Api-Version": "2022-11-28"
     }
-    
+
     try:
         response = requests.get(UV_API_URL, headers=headers, timeout=30)
         response.raise_for_status()
