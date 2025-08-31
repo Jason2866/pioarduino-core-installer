@@ -355,7 +355,7 @@ def get_uv_executable():
     cache_dir = core.get_cache_dir()
     cached_uv = os.path.join(cache_dir, UV_EXE)
 
-    if os.path.isfile(cached_uv) and os.access(cached_uv, os.X_OK):
+    if os.path.isfile(cached_uv) and (util.IS_WINDOWS or os.access(cached_uv, os.X_OK)):
         log.debug("Found cached uv: %s", cached_uv)
         return cached_uv
 
