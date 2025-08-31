@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import hashlib
 import json
 import logging
 import os
@@ -30,7 +31,37 @@ from pioinstaller import __version__, core, exception, python, util
 log = logging.getLogger(__name__)
 
 
-UV_URL = "https://github.com/astral-sh/uv/releases/latest/download/uv-{platform}.{ext}"
+UV_URL = ("https://github.com/astral-sh/uv/releases/latest/download/"
+          "uv-{platform}.{ext}")
+UV_API_URL = "https://api.github.com/repos/astral-sh/uv/releases/latest"
+
+# Download retry configuration
+DEFAULT_RETRIES = 3
+DEFAULT_RETRY_DELAY = 5  # seconds
+
+# Platform-specific constants
+PYTHON_EXE = "python.exe" if util.IS_WINDOWS else "python"
+BIN_DIR = "Scripts" if util.IS_WINDOWS else "bin"
+UV_EXE = "uv.exe" if util.IS_WINDOWS else "uv"
+
+
+class DownloadConfig:
+    """Configuration class for download parameters."""
+
+    def __init__(self, uv_url, archive_path, uv_platform, ext):
+        self.uv_url = uv_url
+        self.archive_path = archive_path
+        self.uv_platform = uv_platform
+        self.ext = ext
+        self.expected_checksum = None
+
+    def set_checksum(self, checksum):
+        """Set the expected checksum for verification."""
+        self.expected_checksum = checksum
+
+    def is_checksum_available(self):
+        """Check if checksum is available for verification."""
+        return self.expected_checksum is not None
 
 
 def get_uv_platform():
@@ -61,15 +92,86 @@ def get_uv_platform():
     plat = platform_map.get(key)
     # Detect musl on Linux
     if system == "Linux" and plat and "-unknown-linux-gnu" in plat:
-        try:
-            out = subprocess.check_output(
-                ["ldd", "--version"], stderr=subprocess.STDOUT
-            )
-            if b"musl" in out:
-                plat = plat.replace("-unknown-linux-gnu", "-unknown-linux-musl")
-        except (subprocess.CalledProcessError, FileNotFoundError, OSError):
-            pass
+        if detect_musl():
+            plat = plat.replace("-unknown-linux-gnu", "-unknown-linux-musl")
     return plat
+
+
+def detect_musl():
+    """Detect musl libc more robustly."""
+    methods = [
+        lambda: b"musl" in subprocess.check_output(
+            ["ldd", "--version"], stderr=subprocess.STDOUT
+        ),
+        lambda: os.path.exists("/lib/libc.musl-x86_64.so.1"),
+        lambda: "musl" in os.environ.get("LD_LIBRARY_PATH", ""),
+    ]
+
+    for method in methods:
+        try:
+            if method():
+                return True
+        except (subprocess.CalledProcessError, FileNotFoundError, OSError):
+            continue
+    return False
+
+
+def fetch_uv_checksums_from_github():
+    """Fetch SHA256 checksums from GitHub API."""
+    try:
+        response = requests.get(UV_API_URL, timeout=30)
+        response.raise_for_status()
+        release_data = response.json()
+
+        checksums = {}
+        for asset in release_data.get("assets", []):
+            asset_name = asset.get("name", "")
+            if asset_name.endswith((".tar.gz", ".zip")):
+                # GitHub now provides SHA256 digests in the API response
+                digest = asset.get("digest", {}).get("sha256")
+                if digest:
+                    checksums[asset_name] = digest
+
+        log.debug("Fetched checksums for %d assets", len(checksums))
+        return checksums
+
+    except (requests.RequestException, json.JSONDecodeError, KeyError) as e:
+        log.warning("Failed to fetch checksums from GitHub API: %s", e)
+        return {}
+
+
+def get_expected_checksum(platform_name, ext):
+    """Get expected checksum for platform and extension."""
+    filename = f"uv-{platform_name}.{ext}"
+    checksums = fetch_uv_checksums_from_github()
+    return checksums.get(filename)
+
+
+def verify_download(file_path, expected_sha256):
+    """Verify downloaded file integrity."""
+    if not expected_sha256:
+        log.warning("No checksum provided for %s, skipping verification",
+                    os.path.basename(file_path))
+        return True
+
+    sha256_hash = hashlib.sha256()
+    try:
+        with open(file_path, "rb") as f:
+            for chunk in iter(lambda: f.read(4096), b""):
+                sha256_hash.update(chunk)
+        calculated_hash = sha256_hash.hexdigest()
+        is_valid = calculated_hash == expected_sha256
+        if not is_valid:
+            log.error("Checksum mismatch for %s: expected %s, got %s",
+                      os.path.basename(file_path), expected_sha256,
+                      calculated_hash)
+        else:
+            log.debug("Checksum verified for %s", os.path.basename(file_path))
+        return is_valid
+    except OSError as e:
+        log.error("Failed to verify checksum for %s: %s",
+                  os.path.basename(file_path), e)
+        return False
 
 
 def _extract_uv_archive(archive_path, extract_dir):
@@ -80,7 +182,8 @@ def _extract_uv_archive(archive_path, extract_dir):
             for m in zf.infolist():
                 dest = os.path.abspath(os.path.join(extract_dir, m.filename))
                 if not dest.startswith(base):
-                    raise exception.PIOInstallerException("Unsafe path in archive")
+                    raise exception.PIOInstallerException(
+                        "Unsafe path in archive")
                 zf.extract(m, extract_dir)
     else:
         with tarfile.open(archive_path, "r:*") as tar:
@@ -88,7 +191,8 @@ def _extract_uv_archive(archive_path, extract_dir):
             for m in tar.getmembers():
                 dest = os.path.abspath(os.path.join(extract_dir, m.name))
                 if not dest.startswith(base):
-                    raise exception.PIOInstallerException("Unsafe path in archive")
+                    raise exception.PIOInstallerException(
+                        "Unsafe path in archive")
                 tar.extract(m, extract_dir)
 
 
@@ -101,38 +205,59 @@ def _find_uv_binary(extract_dir):
     return None
 
 
-def download_and_install_uv(cache_dir):
-    """Download and install uv package manager."""
-    uv_platform = get_uv_platform()
-    if not uv_platform:
+def _prepare_download_dirs(cache_dir, uv_platform, ext):
+    """Prepare directories and paths for download."""
+    os.makedirs(os.path.join(cache_dir, "tmp"), exist_ok=True)
+    archive_path = os.path.join(cache_dir, "tmp", f"uv-{uv_platform}.{ext}")
+    extract_dir = os.path.join(cache_dir, "tmp", "uv-extract")
+    return archive_path, extract_dir
+
+
+def _process_downloaded_archive(archive_path, extract_dir, cache_dir):
+    """Process downloaded archive: extract and install binary."""
+    util.safe_remove_dir(extract_dir)
+    os.makedirs(extract_dir, exist_ok=True)
+    _extract_uv_archive(archive_path, extract_dir)
+
+    uv_binary = _find_uv_binary(extract_dir)
+    if not uv_binary:
         raise exception.PIOInstallerException(
-            f"Unsupported OS/architecture for uv: {platform.system()}/{platform.machine()}"
+            "Could not find uv binary in downloaded archive"
         )
-    ext = "zip" if util.IS_WINDOWS else "tar.gz"
-    uv_url = UV_URL.format(platform=uv_platform, ext=ext)
 
-    log.debug("Downloading uv from %s", uv_url)
-    tmp_dir = os.path.join(cache_dir, "tmp")
-    os.makedirs(tmp_dir, exist_ok=True)
-    uv_archive_path = os.path.join(tmp_dir, f"uv-{uv_platform}.{ext}")
+    uv_dest = os.path.join(cache_dir, UV_EXE)
+    shutil.copy2(uv_binary, uv_dest)
+    if not util.IS_WINDOWS:
+        os.chmod(uv_dest, 0o755)
 
+    log.debug("uv installed at %s", uv_dest)
+    return uv_dest
+
+
+def _attempt_download(config, attempt, retries):
+    """Attempt a single download with checksum verification."""
     try:
-        util.download_file(uv_url, uv_archive_path)
-        extract_dir = os.path.join(tmp_dir, "uv-extract")
-        util.safe_remove_dir(extract_dir)
-        os.makedirs(extract_dir, exist_ok=True)
-        _extract_uv_archive(uv_archive_path, extract_dir)
-        uv_binary = _find_uv_binary(extract_dir)
-        if not uv_binary:
-            raise exception.PIOInstallerException(
-                "Could not find uv binary in downloaded archive"
-            )
-        uv_dest = os.path.join(cache_dir, "uv" + (".exe" if util.IS_WINDOWS else ""))
-        shutil.copy2(uv_binary, uv_dest)
-        if not util.IS_WINDOWS:
-            os.chmod(uv_dest, 0o755)
-        log.debug("uv installed at %s", uv_dest)
-        return uv_dest
+        log.debug("Downloading uv from %s (attempt %d/%d)",
+                 config.uv_url, attempt, retries)
+
+        # Remove potentially corrupted file from previous attempt
+        if os.path.exists(config.archive_path):
+            os.remove(config.archive_path)
+
+        util.download_file(config.uv_url, config.archive_path)
+
+        # Verify checksum from GitHub API
+        if config.is_checksum_available():
+            if not verify_download(config.archive_path,
+                                 config.expected_checksum):
+                raise exception.PIOInstallerException(
+                    "Downloaded uv archive failed checksum verification"
+                )
+        else:
+            log.warning("No checksum available for verification")
+
+        return True
+
     except (
         requests.RequestException,
         tarfile.TarError,
@@ -140,8 +265,47 @@ def download_and_install_uv(cache_dir):
         OSError,
         exception.PIOInstallerException,
     ) as e:
-        log.debug("Could not download or install uv: %s", str(e))
-        return None
+        log.debug("Attempt %d/%d failed: %s", attempt, retries, str(e))
+        return False
+
+
+def download_and_install_uv(cache_dir, retries=DEFAULT_RETRIES,
+                          retry_delay=DEFAULT_RETRY_DELAY):
+    """Download and install uv package manager with retry on failure."""
+    uv_platform = get_uv_platform()
+    if not uv_platform:
+        raise exception.PIOInstallerException(
+            f"Unsupported OS/architecture for uv: "
+            f"{platform.system()}/{platform.machine()}"
+        )
+
+    ext = "zip" if util.IS_WINDOWS else "tar.gz"
+    uv_url = UV_URL.format(platform=uv_platform, ext=ext)
+
+    archive_path, extract_dir = _prepare_download_dirs(
+        cache_dir, uv_platform, ext)
+
+    config = DownloadConfig(uv_url, archive_path, uv_platform, ext)
+    config.set_checksum(get_expected_checksum(uv_platform, ext))
+
+    for attempt in range(1, retries + 1):
+        if not _attempt_download(config, attempt, retries):
+            if attempt < retries:
+                actual_delay = retry_delay * (2 ** (attempt - 1))
+                log.debug("Retrying in %d seconds...", actual_delay)
+                time.sleep(actual_delay)
+            continue
+        return _process_downloaded_archive(archive_path, extract_dir,
+                                         cache_dir)
+
+    # Clean up on final failure
+    if os.path.exists(archive_path):
+        try:
+            os.remove(archive_path)
+        except OSError:
+            pass
+
+    return None
 
 
 def get_uv_executable():
@@ -154,7 +318,7 @@ def get_uv_executable():
 
     # Try to find cached uv
     cache_dir = core.get_cache_dir()
-    cached_uv = os.path.join(cache_dir, "uv" + (".exe" if util.IS_WINDOWS else ""))
+    cached_uv = os.path.join(cache_dir, UV_EXE)
 
     if os.path.isfile(cached_uv) and os.access(cached_uv, os.X_OK):
         log.debug("Found cached uv: %s", cached_uv)
@@ -170,6 +334,7 @@ def get_uv_executable():
 
 
 def get_penv_dir(path=None):
+    """Get the PlatformIO virtual environment directory."""
     if os.getenv("PLATFORMIO_PENV_DIR"):
         return os.getenv("PLATFORMIO_PENV_DIR")
 
@@ -178,11 +343,13 @@ def get_penv_dir(path=None):
 
 
 def get_penv_bin_dir(path=None):
+    """Get the PlatformIO virtual environment bin directory."""
     penv_dir = path or get_penv_dir()
-    return os.path.join(penv_dir, "Scripts" if util.IS_WINDOWS else "bin")
+    return os.path.join(penv_dir, BIN_DIR)
 
 
 def create_core_penv(penv_dir=None, ignore_pythons=None):
+    """Create PlatformIO core virtual environment."""
     penv_dir = penv_dir or get_penv_dir()
 
     # Get uv executable
@@ -209,11 +376,10 @@ def create_core_penv(penv_dir=None, ignore_pythons=None):
             "https://github.com/pioarduino/pioarduino-core-installer/issues"
         )
 
-    python_exe = os.path.join(
-        get_penv_bin_dir(penv_dir), "python.exe" if util.IS_WINDOWS else "python"
-    )
+    python_exe = os.path.join(get_penv_bin_dir(penv_dir), PYTHON_EXE)
     init_state(python_exe, penv_dir)
-    click.echo("Virtual environment has been successfully created at %s!" % penv_dir)
+    click.echo("Virtual environment has been successfully created at %s!" %
+               penv_dir)
     return result_dir
 
 
@@ -227,13 +393,15 @@ def create_venv_with_uv(uv_exe, python_exe, penv_dir):
         # Create venv with uv
         cmd = [uv_exe, "venv", "--python", python_exe, penv_dir]
         subprocess.run(
-            cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT
+            cmd,
+            check=True,
+            timeout=300,  # 5 minutes timeout
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.STDOUT,
         )
 
         # Verify the venv was created
-        expected_python = os.path.join(
-            get_penv_bin_dir(penv_dir), "python.exe" if util.IS_WINDOWS else "python"
-        )
+        expected_python = os.path.join(get_penv_bin_dir(penv_dir), PYTHON_EXE)
         if os.path.isfile(expected_python):
             log.debug("Successfully created venv at %s", penv_dir)
 
@@ -248,9 +416,15 @@ def create_venv_with_uv(uv_exe, python_exe, penv_dir):
     except subprocess.CalledProcessError as e:
         log.debug("Failed to create venv with uv: %s", str(e))
         return None
-    except Exception as e:  # pylint: disable=broad-exception-caught
-        log.debug("Error creating venv with uv: %s", str(e))
+    except subprocess.TimeoutExpired as e:
+        log.debug("Timeout creating venv with uv: %s", str(e))
         return None
+    except OSError as e:
+        log.debug("OS error creating venv with uv: %s", str(e))
+        return None
+    except Exception as e:
+        log.error("Unexpected error creating venv with uv: %s", str(e))
+        raise
 
 
 def install_uv_in_venv_with_system_uv(system_uv_exe, penv_dir):
@@ -267,6 +441,7 @@ def install_uv_in_venv_with_system_uv(system_uv_exe, penv_dir):
         subprocess.run(
             cmd,
             check=True,
+            timeout=120,  # 2 minutes timeout
             stdout=subprocess.DEVNULL,
             stderr=subprocess.STDOUT,
             env=env,
@@ -274,21 +449,35 @@ def install_uv_in_venv_with_system_uv(system_uv_exe, penv_dir):
         log.debug("Successfully installed uv in venv")
     except subprocess.CalledProcessError as e:
         log.debug("Failed to install uv in venv: %s", e)
-        raise exception.PIOInstallerException("Could not install uv in penv") from e
+        raise exception.PIOInstallerException(
+            "Could not install uv in penv") from e
+    except subprocess.TimeoutExpired as e:
+        log.debug("Timeout installing uv in venv: %s", e)
+        raise exception.PIOInstallerException(
+            "Timeout installing uv in penv") from e
 
 
 def init_state(python_exe, penv_dir):
+    """Initialize virtual environment state."""
     version_code = (
         "import sys; version=sys.version_info; "
         "print('%d.%d.%d'%(version[0],version[1],version[2]))"
     )
-    python_version = (
-        subprocess.check_output(
-            [python_exe, "-c", version_code], stderr=subprocess.PIPE
+    try:
+        python_version = (
+            subprocess.check_output(
+                [python_exe, "-c", version_code],
+                stderr=subprocess.PIPE,
+                timeout=30
+            )
+            .decode()
+            .strip()
         )
-        .decode()
-        .strip()
-    )
+    except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as e:
+        log.error("Failed to get python version: %s", e)
+        raise exception.PIOInstallerException(
+            "Could not determine python version") from e
+
     state = {
         "created_on": int(round(time.time())),
         "python": {
@@ -305,19 +494,31 @@ def init_state(python_exe, penv_dir):
 
 
 def load_state(penv_dir=None):
+    """Load virtual environment state."""
     penv_dir = penv_dir or get_penv_dir()
     state_path = os.path.join(penv_dir, "state.json")
     if not os.path.isfile(state_path):
         raise exception.PIOInstallerException(
             "Could not found state.json file in `%s`" % state_path
         )
-    with open(state_path) as fp:
-        return json.load(fp)
+    try:
+        with open(state_path, encoding="utf-8") as fp:
+            return json.load(fp)
+    except (OSError, json.JSONDecodeError) as e:
+        raise exception.PIOInstallerException(
+            f"Could not load state file: {e}"
+        ) from e
 
 
 def save_state(state, penv_dir=None):
+    """Save virtual environment state."""
     penv_dir = penv_dir or get_penv_dir()
     state_path = os.path.join(penv_dir, "state.json")
-    with open(state_path, "w") as fp:
-        json.dump(state, fp)
-    return state_path
+    try:
+        with open(state_path, "w", encoding="utf-8") as fp:
+            json.dump(state, fp, indent=2)
+        return state_path
+    except OSError as e:
+        raise exception.PIOInstallerException(
+            f"Could not save state file: {e}"
+        ) from e
