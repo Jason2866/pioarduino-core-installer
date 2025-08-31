@@ -26,6 +26,7 @@ import zipfile
 import click
 import requests
 
+from dataclasses import dataclass
 from pioinstaller import __version__, core, exception, python, util
 
 log = logging.getLogger(__name__)
@@ -45,21 +46,20 @@ BIN_DIR = "Scripts" if util.IS_WINDOWS else "bin"
 UV_EXE = "uv.exe" if util.IS_WINDOWS else "uv"
 
 
+@dataclass
 class DownloadConfig:
-    """Configuration class for download parameters."""
+    """Configuration for uv download."""
+    uv_url: str
+    archive_path: str
+    uv_platform: str
+    ext: str
+    expected_checksum: str | None = None
 
-    def __init__(self, uv_url, archive_path, uv_platform, ext):
-        self.uv_url = uv_url
-        self.archive_path = archive_path
-        self.uv_platform = uv_platform
-        self.ext = ext
-        self.expected_checksum = None
-
-    def set_checksum(self, checksum):
+    def set_checksum(self, checksum: str | None) -> None:
         """Set the expected checksum for verification."""
         self.expected_checksum = checksum
 
-    def is_checksum_available(self):
+    def is_checksum_available(self) -> bool:
         """Check if checksum is available for verification."""
         return self.expected_checksum is not None
 
@@ -219,7 +219,7 @@ def _extract_uv_archive(archive_path, extract_dir):
                 dest = os.path.abspath(os.path.join(extract_dir, m.filename))
                 if not dest.startswith(base):
                     raise exception.PIOInstallerException(
-                        "Unsafe path in archive")
+                        f"Unsafe path in archive entry: {m.filename}")
                 zf.extract(m, extract_dir)
     else:
         with tarfile.open(archive_path, "r:*") as tar:
@@ -228,7 +228,7 @@ def _extract_uv_archive(archive_path, extract_dir):
                 dest = os.path.abspath(os.path.join(extract_dir, m.name))
                 if not dest.startswith(base):
                     raise exception.PIOInstallerException(
-                        "Unsafe path in archive")
+                        f"Unsafe path in archive entry: {m.name}")
                 tar.extract(m, extract_dir)
 
 
