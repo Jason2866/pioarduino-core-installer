@@ -280,7 +280,7 @@ def _attempt_download(config, attempt, retries):
         if os.path.exists(config.archive_path):
             os.remove(config.archive_path)
 
-        util.download_file(config.uv_url, config.archive_path)
+        util.download_file(config.uv_url, config.archive_path, cache=False)
 
         # Verify checksum from GitHub API
         if config.is_checksum_available():
