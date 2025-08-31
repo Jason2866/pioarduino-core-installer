@@ -296,8 +296,6 @@ def _attempt_download(config, attempt, retries):
 
     except (
         requests.RequestException,
-        tarfile.TarError,
-        zipfile.BadZipFile,
         OSError,
         exception.PIOInstallerException,
     ) as e:
@@ -472,7 +470,8 @@ def install_uv_in_venv_with_system_uv(system_uv_exe, penv_dir):
     env = os.environ.copy()
     env["VIRTUAL_ENV"] = penv_dir
 
-    cmd = [system_uv_exe, "pip", "install", "uv"]
+    venv_python = os.path.join(get_penv_bin_dir(penv_dir), PYTHON_EXE)
+    cmd = [system_uv_exe, "pip", "install", "--python", venv_python, "uv"]
 
     try:
         subprocess.run(
@@ -536,7 +535,7 @@ def load_state(penv_dir=None):
     state_path = os.path.join(penv_dir, "state.json")
     if not os.path.isfile(state_path):
         raise exception.PIOInstallerException(
-            "Could not found state.json file in `%s`" % state_path
+            "Could not find state.json file in `%s`" % state_path
         )
     try:
         with open(state_path, encoding="utf-8") as fp:
