@@ -1,4 +1,5 @@
 # Copyright (c) 2014-present PlatformIO <contact@platformio.org>
+# Copyright (c) 2024-present pioarduino
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -14,10 +15,10 @@
 
 import logging.config
 
-__version__ = "1.3.0"
+__version__ = "1.4.0"
 
 __title__ = "pioarduino-installer"
-__description__ = "An installer for PlatformIO pioarduino Core"
+__description__ = "An installer for pioarduino Core"
 
 __url__ = "https://github.com/pioarduino/pioarduino-core-installer"
 
@@ -26,7 +27,7 @@ __contact__ = "https://discord.gg/Nutz9crnZr"
 
 
 __license__ = "Apache-2.0"
-__copyright__ = "Copyright 2014-present PlatformIO and pioarduino"
+__copyright__ = "Copyright 2014-present PlatformIO and 2024-present pioarduino"
 
 
 logging.basicConfig(format="%(levelname)s: %(message)s")
