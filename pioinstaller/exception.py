@@ -28,9 +28,5 @@ class IncompatiblePythonError(PIOInstallerException):
     MESSAGE = "{0}"
 
 
-class PythonVenvModuleNotFound(PIOInstallerException):
-    MESSAGE = "Could not find Python `venv` module"
-
-
 class InvalidPlatformIOCore(PIOInstallerException):
     MESSAGE = "{0}"

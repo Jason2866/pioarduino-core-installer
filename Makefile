@@ -1,21 +1,31 @@
+# Use uv for all operations
+
+# Always use phony targets
+.PHONY: all lint isort format test install-dev pack before-commit clean publish
+
+# Default target
+all: before-commit
+
 lint:
-	pylint --rcfile=./.pylintrc ./pioinstaller
+	uv run pylint --rcfile=./.pylintrc ./pioinstaller
 
 isort:
-	isort ./tests
-	isort ./pioinstaller
+	uv run isort ./pioinstaller ./tests
 
 format:
-	black ./pioinstaller
-	black ./tests
+	uv run black ./pioinstaller ./tests
 
 test:
-	py.test --verbose --capture=no --exitfirst tests
+	uv run pytest --verbose --capture=no --exitfirst tests
+
+install-dev:
+	uv sync --dev
 
 pack:
-	pioinstaller pack
+	mkdir -p dist
+	uv run pioinstaller pack dist/
 
-before-commit: isort format lint
+before-commit: isort format lint test
 
 clean:
 	find . -name \*.pyc -delete
@@ -23,4 +33,5 @@ clean:
 	rm -rf .cache
 
 publish:
-	python setup.py sdist upload
+	uv build
+	uv publish

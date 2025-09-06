@@ -21,7 +21,6 @@ import platform
 import subprocess
 import sys
 import time
-import requests
 
 import click
 import semantic_version
@@ -31,22 +30,42 @@ from pioinstaller import __version__, exception, home, util
 log = logging.getLogger(__name__)
 
 PIO_CORE_API_URL = (
-    "https://api.github.com/repos/pioarduino/"
-    "platformio-core/releases/latest"
+    "https://api.github.com/repos/pioarduino/platformio-core/releases/latest"
 )
-api_data = requests.get(PIO_CORE_API_URL, timeout=10).json()
-try:
-    data = api_data["zipball_url"]
-except KeyError:
-    data = "https://github.com/pioarduino/platformio-core/archive/refs/tags/v6.1.16.zip"
-    print(
-        "Could not download actual pioarduino core. Try to install v6.1.16 instead."
-    )
-PIO_CORE_RELEASE_URL = data
 PIO_CORE_DEVELOP_URL = (
-    "https://github.com/pioarduino/platformio-core/"
-    "archive/pio_github.zip"
+    "https://github.com/pioarduino/platformio-core/archive/pioarduino.zip"
 )
+
+
+def _get_release_url():
+    """Resolve latest release zip URL lazily with fallback and cache."""
+    # pylint: disable=protected-access
+    if hasattr(_get_release_url, "_cache"):
+        return _get_release_url._cache
+    try:
+        import requests
+    except ImportError as exc:
+        log.debug("Falling back to pinned core URL due to missing requests: %s", exc)
+        url = "https://github.com/pioarduino/platformio-core/archive/refs/tags/v6.1.18.zip"
+        _get_release_url._cache = url
+        return url
+
+    try:
+        resp = requests.get(PIO_CORE_API_URL, timeout=5)
+        resp.raise_for_status()
+        tag_name = resp.json().get("tag_name")
+        if tag_name:
+            url = f"https://github.com/pioarduino/platformio-core/archive/refs/tags/{tag_name}.zip"
+        else:
+            raise KeyError("tag_name missing")
+    except (requests.RequestException, KeyError) as exc:
+        log.debug("Falling back to pinned core URL due to: %s", exc)
+        url = "https://github.com/pioarduino/platformio-core/archive/refs/tags/v6.1.18.zip"
+    # pylint: disable=protected-access
+    _get_release_url._cache = url
+    return url
+
+
 UPDATE_INTERVAL = 60 * 60 * 24 * 31  # 31 days
 
 
@@ -116,19 +135,54 @@ def _install_platformio_core(shutdown_piohome=True, develop=False, ignore_python
         home.shutdown_pio_home_servers()
 
     penv_dir = penv.create_core_penv(ignore_pythons=ignore_pythons)
-    python_exe = os.path.join(
-        penv.get_penv_bin_dir(penv_dir), "python.exe" if util.IS_WINDOWS else "python"
-    )
-    command = [python_exe, "-m", "pip", "install", "-U"]
+
+    # Use uv for installation
+    uv_exe = penv.get_uv_executable()
+    if not uv_exe:
+        raise exception.PIOInstallerException(
+            "uv package manager is required but not available. Please install uv first."
+        )
+
+    _install_with_uv(uv_exe, penv_dir, develop)
+    _post_install_message(penv_dir)
+    return True
+
+
+def _install_with_uv(uv_exe, penv_dir, develop):
+    """Install platformio core using uv."""
+    from pioinstaller import penv
+
     if develop:
-        click.echo("Installing a development version of pioarduino Core")
-        command.append(PIO_CORE_DEVELOP_URL)
+        click.echo("Installing a development version of pioarduino Core using uv")
+        command = [
+            uv_exe,
+            "pip",
+            "install",
+            "--python",
+            os.path.join(
+                penv.get_penv_bin_dir(penv_dir),
+                "python.exe" if util.IS_WINDOWS else "python",
+            ),
+            PIO_CORE_DEVELOP_URL,
+        ]
     else:
-        click.echo("Installing pioarduino Core")
-        command.append(PIO_CORE_RELEASE_URL)
+        click.echo("Installing pioarduino Core using uv")
+        command = [
+            uv_exe,
+            "pip",
+            "install",
+            "--python",
+            os.path.join(
+                penv.get_penv_bin_dir(penv_dir),
+                "python.exe" if util.IS_WINDOWS else "python",
+            ),
+            _get_release_url(),
+        ]
+
+    log.debug("Running: %s", " ".join(command))
     try:
         subprocess.check_call(command)
-    except Exception as e:  # pylint:disable=broad-except
+    except subprocess.CalledProcessError as e:
         error = str(e)
         if util.IS_WINDOWS:
             error = (
@@ -136,8 +190,14 @@ def _install_platformio_core(shutdown_piohome=True, develop=False, ignore_python
                 " try to disable it for a while.\n %s" % error
             )
         raise exception.PIOInstallerException(
-            "Could not install pioarduino Core: %s" % error
-        )
+            "Could not install pioarduino Core with uv: %s" % error
+        ) from e
+
+
+def _post_install_message(penv_dir):
+    """Display post-installation success message."""
+    from pioinstaller import penv
+
     platformio_exe = os.path.join(
         penv.get_penv_bin_dir(penv_dir),
         "platformio.exe" if util.IS_WINDOWS else "platformio",
@@ -276,10 +336,10 @@ import sys
 
 import platformio
 
-if sys.version_info < (3, 6):
+if sys.version_info < (3, 10):
     raise Exception(
         "Unsupported Python version: %s. "
-        "Minimum supported Python version is 3.6 or above."
+        "Minimum supported Python version is 3.10 or above."
         % platform.python_version(),
     )
 
@@ -333,11 +393,12 @@ def auto_upgrade_core(platformio_exe, develop=False):
             stderr=subprocess.PIPE,
         )
         return True
-    except Exception as e:  # pylint:disable=broad-except
-        raise exception.PIOInstallerException(
-            "Could not upgrade pioarduino Core: %s" % str(e)
+    except subprocess.CalledProcessError as e:
+        msg = (
+            "Could not upgrade pioarduino Core: "
+            f"{e.output.decode(errors='ignore') if hasattr(e, 'output') else str(e)}"
         )
-    return False
+        raise exception.PIOInstallerException(msg) from e
 
 
 def dump_state(target, state):
