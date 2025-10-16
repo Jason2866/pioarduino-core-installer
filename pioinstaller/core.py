@@ -105,6 +105,7 @@ def get_cache_dir():
 
 
 def install_platformio_core(shutdown_piohome=True, develop=False, ignore_pythons=None):
+    # pylint: disable=unused-argument
     # ignore_pythons is deprecated but kept for backward compatibility
     try:
         return _install_platformio_core(

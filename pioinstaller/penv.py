@@ -20,7 +20,6 @@ import os
 import platform
 import shutil
 import subprocess
-import tempfile
 import time
 
 import click
@@ -101,7 +100,7 @@ def install_uv_with_official_script(cache_dir):
     except subprocess.TimeoutExpired as e:
         log.debug("Timeout installing uv: %s", e)
         return None
-    except Exception as e:
+    except OSError as e:
         log.exception("Unexpected error installing uv: %s", e)
         return None
 
