@@ -45,21 +45,21 @@ UV_EXE = "uv.exe" if util.IS_WINDOWS else "uv"
 def install_uv_with_official_script(cache_dir):
     """Install uv using official installation scripts."""
     uv_dest = os.path.join(cache_dir, UV_EXE)
-    
+
     try:
         if util.IS_WINDOWS:
             # Use PowerShell installer for Windows
             log.debug("Installing uv using official Windows installer")
             env = os.environ.copy()
             env["UV_INSTALL_DIR"] = cache_dir
-            
+
             cmd = [
                 "powershell",
                 "-ExecutionPolicy", "ByPass",
                 "-Command",
                 f"irm {UV_INSTALL_SCRIPT_WINDOWS} | iex"
             ]
-            
+
             subprocess.run(
                 cmd,
                 check=True,
@@ -73,9 +73,9 @@ def install_uv_with_official_script(cache_dir):
             log.debug("Installing uv using official Unix installer")
             env = os.environ.copy()
             env["UV_INSTALL_DIR"] = cache_dir
-            
+
             cmd = ["sh", "-c", f"curl -LsSf {UV_INSTALL_SCRIPT_UNIX} | sh"]
-            
+
             subprocess.run(
                 cmd,
                 check=True,
@@ -84,17 +84,17 @@ def install_uv_with_official_script(cache_dir):
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
             )
-        
+
         # Verify installation
         if os.path.isfile(uv_dest):
             if not util.IS_WINDOWS:
                 os.chmod(uv_dest, 0o755)
             log.debug("uv installed at %s", uv_dest)
             return uv_dest
-        
+
         log.error("uv binary not found after installation")
         return None
-        
+
     except subprocess.CalledProcessError as e:
         log.debug("Failed to install uv: %s", e)
         return None
@@ -156,7 +156,7 @@ def create_core_penv(penv_dir=None):
         raise exception.PIOInstallerException(
             "uv package manager is required. Please install uv first."
         )
-    
+
     # Ensure uv is resolvable via PATH for helpers that shell out to "uv"
     uv_dir = os.path.dirname(uv_exe)
     current_path = os.environ.get("PATH", "")
@@ -206,10 +206,10 @@ def create_venv_with_uv(uv_exe, penv_dir):
         expected_python = os.path.join(get_penv_bin_dir(penv_dir), PYTHON_EXE)
         if os.path.isfile(expected_python):
             log.debug("Successfully created venv at %s with Python %s", penv_dir, PYTHON_VERSION)
-            
+
             # Make uv CLI available inside the venv
             install_uv_in_venv_with_system_uv(uv_exe, penv_dir)
-            
+
             return penv_dir
 
         log.debug("Expected python not found at %s", expected_python)

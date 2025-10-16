@@ -105,11 +105,11 @@ def get_cache_dir():
 
 
 def install_platformio_core(shutdown_piohome=True, develop=False, ignore_pythons=None):
+    # ignore_pythons is deprecated but kept for backward compatibility
     try:
         return _install_platformio_core(
             shutdown_piohome=shutdown_piohome,
             develop=develop,
-            ignore_pythons=ignore_pythons,
         )
     except subprocess.CalledProcessError as exc:
         # Issue #221: Workaround for Windows OS when username contains a space
@@ -122,19 +122,18 @@ def install_platformio_core(shutdown_piohome=True, develop=False, ignore_pythons
             return _install_platformio_core(
                 shutdown_piohome=shutdown_piohome,
                 develop=develop,
-                ignore_pythons=ignore_pythons,
             )
         raise exc
 
 
-def _install_platformio_core(shutdown_piohome=True, develop=False, ignore_pythons=None):
+def _install_platformio_core(shutdown_piohome=True, develop=False):
     # pylint: disable=bad-option-value, import-outside-toplevel, unused-import, import-error, unused-variable, cyclic-import
     from pioinstaller import penv
 
     if shutdown_piohome:
         home.shutdown_pio_home_servers()
 
-    penv_dir = penv.create_core_penv(ignore_pythons=ignore_pythons)
+    penv_dir = penv.create_core_penv()
 
     # Use uv for installation
     uv_exe = penv.get_uv_executable()
