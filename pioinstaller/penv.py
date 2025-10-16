@@ -54,9 +54,10 @@ def install_uv_with_official_script(cache_dir):
 
             cmd = [
                 "powershell",
-                "-ExecutionPolicy", "ByPass",
+                "-ExecutionPolicy",
+                "ByPass",
                 "-Command",
-                f"irm {UV_INSTALL_SCRIPT_WINDOWS} | iex"
+                f"irm {UV_INSTALL_SCRIPT_WINDOWS} | iex",
             ]
 
             subprocess.run(
@@ -172,8 +173,7 @@ def create_core_penv(penv_dir=None):
 
     python_exe = os.path.join(get_penv_bin_dir(penv_dir), PYTHON_EXE)
     init_state(python_exe, penv_dir)
-    click.echo("Virtual environment has been successfully created at %s!" %
-               penv_dir)
+    click.echo("Virtual environment has been successfully created at %s!" % penv_dir)
     return result_dir
 
 
@@ -204,7 +204,11 @@ def create_venv_with_uv(uv_exe, penv_dir):
         # Verify the venv was created
         expected_python = os.path.join(get_penv_bin_dir(penv_dir), PYTHON_EXE)
         if os.path.isfile(expected_python):
-            log.debug("Successfully created venv at %s with Python %s", penv_dir, PYTHON_VERSION)
+            log.debug(
+                "Successfully created venv at %s with Python %s",
+                penv_dir,
+                PYTHON_VERSION,
+            )
 
             # Make uv CLI available inside the venv
             install_uv_in_venv_with_system_uv(uv_exe, penv_dir)
@@ -251,12 +255,10 @@ def install_uv_in_venv_with_system_uv(system_uv_exe, penv_dir):
         log.debug("Successfully installed uv in venv")
     except subprocess.CalledProcessError as e:
         log.debug("Failed to install uv in venv: %s", e)
-        raise exception.PIOInstallerException(
-            "Could not install uv in penv") from e
+        raise exception.PIOInstallerException("Could not install uv in penv") from e
     except subprocess.TimeoutExpired as e:
         log.debug("Timeout installing uv in venv: %s", e)
-        raise exception.PIOInstallerException(
-            "Timeout installing uv in penv") from e
+        raise exception.PIOInstallerException("Timeout installing uv in penv") from e
 
 
 def init_state(python_exe, penv_dir):
@@ -268,9 +270,7 @@ def init_state(python_exe, penv_dir):
     try:
         python_version = (
             subprocess.check_output(
-                [python_exe, "-c", version_code],
-                stderr=subprocess.PIPE,
-                timeout=30
+                [python_exe, "-c", version_code], stderr=subprocess.PIPE, timeout=30
             )
             .decode()
             .strip()
@@ -278,7 +278,8 @@ def init_state(python_exe, penv_dir):
     except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as e:
         log.exception("Failed to get python version")
         raise exception.PIOInstallerException(
-            "Could not determine python version") from e
+            "Could not determine python version"
+        ) from e
 
     state = {
         "created_on": int(round(time.time())),
@@ -307,9 +308,7 @@ def load_state(penv_dir=None):
         with open(state_path, encoding="utf-8") as fp:
             return json.load(fp)
     except (OSError, json.JSONDecodeError) as e:
-        raise exception.PIOInstallerException(
-            f"Could not load state file: {e}"
-        ) from e
+        raise exception.PIOInstallerException(f"Could not load state file: {e}") from e
 
 
 def save_state(state, penv_dir=None):
@@ -321,6 +320,4 @@ def save_state(state, penv_dir=None):
             json.dump(state, fp, indent=2)
         return state_path
     except OSError as e:
-        raise exception.PIOInstallerException(
-            f"Could not save state file: {e}"
-        ) from e
+        raise exception.PIOInstallerException(f"Could not save state file: {e}") from e
