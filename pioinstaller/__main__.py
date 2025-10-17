@@ -58,6 +58,18 @@ def cli(
 
 
 @cli.command()
+@click.option("--shutdown-piohome/--no-shutdown-piohome", is_flag=True, default=True)
+@click.pass_context
+def install(ctx, shutdown_piohome):
+    """Install PlatformIO Core."""
+    try:
+        core.install_platformio_core(shutdown_piohome, ctx.obj.get("dev", False))
+        click.secho("PlatformIO Core has been successfully installed!", fg="green")
+    except exception.PIOInstallerException as exc:
+        raise click.ClickException(str(exc))
+
+
+@cli.command()
 @click.argument(
     "target",
     default=os.getcwd,
