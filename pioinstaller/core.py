@@ -144,6 +144,10 @@ def _install_platformio_core(shutdown_piohome=True, develop=False):
         )
 
     _install_with_uv(uv_exe, penv_dir, develop)
+    
+    # Install UV in the penv for future use
+    _install_uv_in_penv(uv_exe, penv_dir)
+    
     _post_install_message(penv_dir)
     return True
 
@@ -192,6 +196,29 @@ def _install_with_uv(uv_exe, penv_dir, develop):
         raise exception.PIOInstallerException(
             "Could not install pioarduino Core with uv: %s" % error
         ) from e
+
+
+def _install_uv_in_penv(uv_exe, penv_dir):
+    """Install UV in the penv for future use."""
+    from pioinstaller import penv
+    
+    click.echo("Installing UV in penv for future use")
+    
+    venv_python = os.path.join(
+        penv.get_penv_bin_dir(penv_dir),
+        "python.exe" if util.IS_WINDOWS else "python",
+    )
+    
+    command = [uv_exe, "pip", "install", "--python", venv_python, "uv"]
+    
+    log.debug("Running: %s", " ".join(command))
+    try:
+        subprocess.check_call(command, stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
+        click.echo("UV successfully installed in penv")
+    except subprocess.CalledProcessError as e:
+        # Don't fail the entire installation if UV installation fails
+        log.warning("Could not install UV in penv: %s", e)
+        click.echo("Warning: Could not install UV in penv (non-critical)")
 
 
 def _post_install_message(penv_dir):
