@@ -105,11 +105,12 @@ def get_cache_dir():
 
 
 def install_platformio_core(shutdown_piohome=True, develop=False, ignore_pythons=None):
+    # pylint: disable=unused-argument
+    # ignore_pythons is deprecated but kept for backward compatibility
     try:
         return _install_platformio_core(
             shutdown_piohome=shutdown_piohome,
             develop=develop,
-            ignore_pythons=ignore_pythons,
         )
     except subprocess.CalledProcessError as exc:
         # Issue #221: Workaround for Windows OS when username contains a space
@@ -122,19 +123,18 @@ def install_platformio_core(shutdown_piohome=True, develop=False, ignore_pythons
             return _install_platformio_core(
                 shutdown_piohome=shutdown_piohome,
                 develop=develop,
-                ignore_pythons=ignore_pythons,
             )
         raise exc
 
 
-def _install_platformio_core(shutdown_piohome=True, develop=False, ignore_pythons=None):
+def _install_platformio_core(shutdown_piohome=True, develop=False):
     # pylint: disable=bad-option-value, import-outside-toplevel, unused-import, import-error, unused-variable, cyclic-import
     from pioinstaller import penv
 
     if shutdown_piohome:
         home.shutdown_pio_home_servers()
 
-    penv_dir = penv.create_core_penv(ignore_pythons=ignore_pythons)
+    penv_dir = penv.create_core_penv()
 
     # Use uv for installation
     uv_exe = penv.get_uv_executable()
@@ -144,6 +144,10 @@ def _install_platformio_core(shutdown_piohome=True, develop=False, ignore_python
         )
 
     _install_with_uv(uv_exe, penv_dir, develop)
+
+    # Install UV in the penv for future use
+    _install_uv_in_penv(uv_exe, penv_dir)
+
     _post_install_message(penv_dir)
     return True
 
@@ -192,6 +196,31 @@ def _install_with_uv(uv_exe, penv_dir, develop):
         raise exception.PIOInstallerException(
             "Could not install pioarduino Core with uv: %s" % error
         ) from e
+
+
+def _install_uv_in_penv(uv_exe, penv_dir):
+    """Install UV in the penv for future use."""
+    from pioinstaller import penv
+
+    click.echo("Installing UV in penv for future use")
+
+    venv_python = os.path.join(
+        penv.get_penv_bin_dir(penv_dir),
+        "python.exe" if util.IS_WINDOWS else "python",
+    )
+
+    command = [uv_exe, "pip", "install", "--python", venv_python, "uv"]
+
+    log.debug("Running: %s", " ".join(command))
+    try:
+        subprocess.check_call(
+            command, stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT
+        )
+        click.echo("UV successfully installed in penv")
+    except subprocess.CalledProcessError as e:
+        # Don't fail the entire installation if UV installation fails
+        log.warning("Could not install UV in penv: %s", e)
+        click.echo("Warning: Could not install UV in penv (non-critical)")
 
 
 def _post_install_message(penv_dir):
