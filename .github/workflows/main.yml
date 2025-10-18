@@ -16,6 +16,21 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
+      - name: Remove Homebrew Python (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          # Liste alle installierten Python-Versionen von Homebrew auf
+          brew list --formula | grep '^python@' | while read formula; do
+            echo "Uninstalling $formula"
+            brew uninstall --ignore-dependencies --force "$formula"
+          done
+          # Entferne auch unversioniertes python falls vorhanden
+          if brew list python &>/dev/null; then
+            brew uninstall --ignore-dependencies --force python
+          fi
+          # Entferne Symlinks in /usr/local/bin
+          sudo rm -f /usr/local/bin/python* /usr/local/bin/pip* /usr/local/bin/2to3*
+        shell: bash
       - name: Set up Python ${{ matrix.python-version }}
         uses: actions/setup-python@v5
         with:
