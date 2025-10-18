@@ -39,7 +39,7 @@ jobs:
         uses: astral-sh/setup-uv@v4
         with:
           enable-cache: true
-          cache-dependency-path: |
+          cache-dependency-glob: |
             pyproject.toml
             uv.lock
       - name: Check Python and uv
