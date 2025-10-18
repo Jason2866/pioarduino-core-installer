@@ -25,7 +25,7 @@ classifiers = [
     "Topic :: Software Development :: Embedded Systems",
     "Topic :: System :: Installation/Setup",
 ]
-requires-python = ">=3.10"
+requires-python = ">=3.9"
 dependencies = [
     "click>=8.1.0",
     "requests>=2.32,<3",
