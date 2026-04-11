@@ -45,7 +45,7 @@ def is_conda():
 
 def is_portable():
     """
-    Check if the current Python is portable and compatible (3.10-3.13).
+    Check if the current Python is portable and compatible (3.13 only).
     Returns True if compatible (including WinPython), otherwise False.
     """
     try:
@@ -125,7 +125,7 @@ def is_version_system_compatible(_version, _systype):
 
 def check():
     """
-    Verify if the current Python environment is compatible (3.10-3.13).
+    Verify if the current Python environment is compatible (3.13 only).
     Raises IncompatiblePythonError on failure.
     Returns True if compatible.
     """
@@ -133,11 +133,11 @@ def check():
     if sys.platform == "cygwin":
         raise exception.IncompatiblePythonError("Unsupported Cygwin platform")
 
-    # Version check: Accept only 3.10 up to (and not including) 3.14
-    if sys.version_info < (3, 10) or sys.version_info >= (3, 14):
+    # Version check: Accept only 3.13.x
+    if sys.version_info[:2] != (3, 13):
         raise exception.IncompatiblePythonError(
             "Unsupported Python version: %s. "
-            "Supported Python versions are 3.10 to 3.13." % platform.python_version(),
+            "Only Python 3.13 is supported." % platform.python_version(),
         )
 
     # Conda environments are not supported
@@ -171,7 +171,7 @@ def check():
 
 def find_compatible_pythons(ignore_pythons=None, raise_exception=True):
     """
-    Find all compatible Python executables in the system (Python 3.10 - 3.13).
+    Find all compatible Python 3.13 executables in the system.
     Optionally install Python 3.13 using uv if none are found.
     Returns a list of executable paths.
     """
@@ -180,11 +180,8 @@ def find_compatible_pythons(ignore_pythons=None, raise_exception=True):
         ignore_list.extend(glob.glob(p))
 
     exenames = [
-        "python3",  # system Python
+        "python3",
         "python3.13",
-        "python3.12",
-        "python3.11",
-        "python3.10",
         "python",
     ]
     if util.IS_WINDOWS:
@@ -204,10 +201,7 @@ def find_compatible_pythons(ignore_pythons=None, raise_exception=True):
 
     if not result and raise_exception:
         # Try to install Python 3.13 using uv
-        log.debug(
-            "No compatible Python 3.10-3.13 found, attempting to install "
-            "Python 3.13 using uv"
-        )
+        log.debug("No Python 3.13 found, attempting to install Python 3.13 using uv")
         try:
             python_exe = fetch_portable_python(None)
             if python_exe and _is_python_compatible(python_exe):
@@ -221,10 +215,9 @@ def find_compatible_pythons(ignore_pythons=None, raise_exception=True):
 
         # If uv installation failed, raise the original error
         raise exception.IncompatiblePythonError(
-            "Could not find compatible Python 3.10-3.13 in your system. "
+            "Could not find Python 3.13 in your system. "
             "Attempt to install Python 3.13 using uv failed. "
-            "Please install Python 3.10, 3.11, 3.12, or 3.13 manually and restart "
-            "installation."
+            "Please install Python 3.13 manually and restart installation."
         )
 
     return result
@@ -252,8 +245,8 @@ def _get_python_candidates(exenames):
 
 def _is_python_compatible(python_exe):
     """
-    Determine if the specified Python executable is compatible (version 3.10 - 3.13).
-    Returns True if compatible, otherwise False.
+    Determine if the specified Python executable is Python 3.13.
+    Returns True if 3.13, otherwise False.
     """
     try:
         # Python version check using subprocess
@@ -266,8 +259,8 @@ def _is_python_compatible(python_exe):
         output = subprocess.check_output(cmd, stderr=subprocess.STDOUT)
         version_str = output.decode().strip()
 
-        # Match Python version 3.10, 3.11, 3.12, or 3.13
-        if re.match(r"^3\.(10|11|12|13)$", version_str):
+        # Match only Python 3.13
+        if re.match(r"^3\.13$", version_str):
             log.debug("Found compatible Python %s: %s", python_exe, version_str)
             return True
 

@@ -32,8 +32,12 @@ log = logging.getLogger(__name__)
 UV_INSTALL_SCRIPT_UNIX = "https://astral.sh/uv/install.sh"
 UV_INSTALL_SCRIPT_WINDOWS = "https://astral.sh/uv/install.ps1"
 
-# Python version to use
-PYTHON_VERSION = "3.13"
+UV_URL = "https://github.com/astral-sh/uv/releases/latest/download/uv-{platform}.{ext}"
+UV_API_URL = "https://api.github.com/repos/astral-sh/uv/releases/latest"
+
+# Download retry configuration
+DEFAULT_RETRIES = 3
+DEFAULT_RETRY_DELAY = 5  # seconds
 
 # Platform-specific constants
 PYTHON_EXE = "python.exe" if util.IS_WINDOWS else "python"
@@ -41,16 +45,242 @@ BIN_DIR = "Scripts" if util.IS_WINDOWS else "bin"
 UV_EXE = "uv.exe" if util.IS_WINDOWS else "uv"
 
 
-def install_uv_with_official_script(cache_dir):
-    """Install uv using official installation scripts."""
+@dataclass
+class DownloadConfig:
+    """Configuration for uv download."""
+
+    uv_url: str
+    archive_path: str
+    uv_platform: str
+    ext: str
+    expected_checksum: str | None = None
+
+    def set_checksum(self, checksum: str | None) -> None:
+        """Set the expected checksum for verification."""
+        self.expected_checksum = checksum
+
+    def is_checksum_available(self) -> bool:
+        """Check if checksum is available for verification."""
+        return self.expected_checksum is not None
+
+
+def get_uv_platform():
+    """Get the uv platform identifier for the current system."""
+    platform_map = {
+        ("Windows", "AMD64"): "x86_64-pc-windows-msvc",
+        ("Windows", "ARM64"): "aarch64-pc-windows-msvc",
+        ("Windows", "x86"): "i686-pc-windows-msvc",
+        ("Darwin", "x86_64"): "x86_64-apple-darwin",
+        ("Darwin", "arm64"): "aarch64-apple-darwin",
+        ("Linux", "x86_64"): "x86_64-unknown-linux-gnu",
+        ("Linux", "aarch64"): "aarch64-unknown-linux-gnu",
+        ("Linux", "i686"): "i686-unknown-linux-gnu",
+        ("Linux", "armv7l"): "armv7-unknown-linux-gnueabihf",
+    }
+
+    system = platform.system()
+    machine = platform.machine()
+    # normalize common variations
+    if machine.lower() in ("x86_64", "amd64"):
+        machine = "x86_64" if system != "Windows" else "AMD64"
+
+    # Handle different arm64 representations on macOS
+    if system == "Darwin" and machine in ("arm64", "aarch64"):
+        machine = "arm64"
+
+    key = (system, machine)
+    plat = platform_map.get(key)
+    # Detect musl on Linux
+    if system == "Linux" and plat and detect_musl():
+        if plat.endswith("-unknown-linux-gnu"):
+            plat = plat.replace("-unknown-linux-gnu", "-unknown-linux-musl")
+        elif plat.endswith("-unknown-linux-gnueabihf"):
+            plat = plat.replace("gnueabihf", "musleabihf")
+    return plat
+
+
+def detect_musl():
+    """Detect musl libc more robustly."""
+    ldd_path = shutil.which("ldd")
+    methods = [
+        lambda: bool(ldd_path)
+        and b"musl"
+        in subprocess.check_output([ldd_path, "--version"], stderr=subprocess.STDOUT),
+        lambda: os.path.exists("/lib/libc.musl-x86_64.so.1"),
+        lambda: "musl" in os.environ.get("LD_LIBRARY_PATH", ""),
+    ]
+
+    for method in methods:
+        try:
+            if method():
+                return True
+        except (subprocess.CalledProcessError, FileNotFoundError, OSError):
+            continue
+    return False
+
+
+def _parse_digest_string(digest_str):
+    """Parse digest string from GitHub API.
+
+    GitHub returns digest as string like 'sha256:abc123...'
+    Parse and return the hash value if it's SHA256.
+    """
+    if not digest_str or not isinstance(digest_str, str):
+        return None
+
+    parts = digest_str.split(":", 1)
+    if len(parts) != 2:
+        return None
+
+    algorithm, hash_value = parts
+    if algorithm.lower() != "sha256":
+        return None
+
+    return hash_value.strip().lower()
+
+
+def fetch_uv_checksums_from_github():
+    """Fetch SHA256 checksums from GitHub API."""
+    # Set proper headers for GitHub API stability
+    headers = {
+        "Accept": "application/vnd.github+json",
+        "User-Agent": f"PlatformIO-Installer/{__version__}",
+        "X-GitHub-Api-Version": "2022-11-28",
+    }
+
+    try:
+        response = requests.get(UV_API_URL, headers=headers, timeout=30)
+        response.raise_for_status()
+        release_data = response.json()
+
+        checksums = {}
+        for asset in release_data.get("assets", []):
+            asset_name = asset.get("name", "")
+            if asset_name.endswith((".tar.gz", ".zip")):
+                # GitHub digest is a string like "sha256:abc123..."
+                digest_str = asset.get("digest")
+                digest_hash = _parse_digest_string(digest_str)
+                if digest_hash:
+                    checksums[asset_name] = digest_hash
+                    log.debug(
+                        "Found checksum for %s: %s",
+                        asset_name,
+                        digest_hash[:16] + "...",
+                    )
+
+        log.debug("Fetched checksums for %d assets", len(checksums))
+        return checksums
+
+    except (
+        requests.RequestException,
+        json.JSONDecodeError,
+        KeyError,
+        AttributeError,
+    ) as e:
+        log.warning("Failed to fetch checksums from GitHub API: %s", e)
+        return {}
+
+
+def get_expected_checksum(platform_name, ext):
+    """Get expected checksum for platform and extension."""
+    filename = f"uv-{platform_name}.{ext}"
+    checksums = fetch_uv_checksums_from_github()
+    return checksums.get(filename)
+
+
+def verify_download(file_path, expected_sha256):
+    """Verify downloaded file integrity."""
+    if not expected_sha256:
+        log.warning(
+            "No checksum provided for %s, skipping verification",
+            os.path.basename(file_path),
+        )
+        return True
+
+    sha256_hash = hashlib.sha256()
+    try:
+        with open(file_path, "rb") as f:
+            for chunk in iter(lambda: f.read(4096), b""):
+                sha256_hash.update(chunk)
+        calculated_hash = sha256_hash.hexdigest().lower()
+        expected = (expected_sha256 or "").strip().lower()
+        if ":" in expected:
+            expected = expected.split(":", 1)[1]
+        is_valid = calculated_hash == expected
+        if not is_valid:
+            log.error(
+                "Checksum mismatch for %s: expected %s, got %s",
+                os.path.basename(file_path),
+                expected,
+                calculated_hash,
+            )
+        else:
+            log.debug("Checksum verified for %s", os.path.basename(file_path))
+        return is_valid
+    except OSError:
+        log.exception("Failed to verify checksum for %s", os.path.basename(file_path))
+        return False
+
+
+def _extract_uv_archive(archive_path, extract_dir):
+    """Extract uv archive to extract_dir and check for unsafe paths."""
+    if util.IS_WINDOWS:
+        with zipfile.ZipFile(archive_path) as zf:
+            base = os.path.abspath(extract_dir) + os.sep
+            for m in zf.infolist():
+                dest = os.path.abspath(os.path.join(extract_dir, m.filename))
+                if not dest.startswith(base):
+                    raise exception.PIOInstallerException(
+                        f"Unsafe path in archive entry: {m.filename}"
+                    )
+                zf.extract(m, extract_dir)
+    else:
+        with tarfile.open(archive_path, "r:*") as tar:
+            base = os.path.abspath(extract_dir) + os.sep
+            for m in tar.getmembers():
+                dest = os.path.abspath(os.path.join(extract_dir, m.name))
+                if not dest.startswith(base):
+                    raise exception.PIOInstallerException(
+                        f"Unsafe path in archive entry: {m.name}"
+                    )
+                tar.extract(m, extract_dir)
+
+
+def _find_uv_binary(extract_dir):
+    """Find the uv binary in the extracted files."""
+    for root, _, files in os.walk(extract_dir):
+        for file in files:
+            if file in ("uv", "uv.exe"):
+                return os.path.join(root, file)
+    return None
+
+
+def _prepare_download_dirs(cache_dir, uv_platform, ext):
+    """Prepare directories and paths for download."""
+    os.makedirs(os.path.join(cache_dir, "tmp"), exist_ok=True)
+    archive_path = os.path.join(cache_dir, "tmp", f"uv-{uv_platform}.{ext}")
+    extract_dir = os.path.join(cache_dir, "tmp", "uv-extract")
+    return archive_path, extract_dir
+
+
+def _process_downloaded_archive(archive_path, extract_dir, cache_dir):
+    """Process downloaded archive: extract and install binary."""
+    util.safe_remove_dir(extract_dir)
+    os.makedirs(extract_dir, exist_ok=True)
+    _extract_uv_archive(archive_path, extract_dir)
+
+    uv_binary = _find_uv_binary(extract_dir)
+    if not uv_binary:
+        raise exception.PIOInstallerException(
+            "Could not find uv binary in downloaded archive"
+        )
+
     uv_dest = os.path.join(cache_dir, UV_EXE)
 
     try:
-        if util.IS_WINDOWS:
-            # Use PowerShell installer for Windows
-            log.debug("Installing uv using official Windows installer")
-            env = os.environ.copy()
-            env["UV_INSTALL_DIR"] = cache_dir
+        log.debug(
+            "Downloading uv from %s (attempt %d/%d)", config.uv_url, attempt, retries
+        )
 
             cmd = [
                 "powershell",
@@ -60,14 +290,14 @@ def install_uv_with_official_script(cache_dir):
                 f"irm {UV_INSTALL_SCRIPT_WINDOWS} | iex",
             ]
 
-            subprocess.run(
-                cmd,
-                check=True,
-                timeout=300,
-                env=env,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-            )
+        util.download_file(config.uv_url, config.archive_path, cache=False)
+
+        # Verify checksum from GitHub API
+        if config.is_checksum_available():
+            if not verify_download(config.archive_path, config.expected_checksum):
+                raise exception.PIOInstallerException(
+                    "Downloaded uv archive failed checksum verification"
+                )
         else:
             # Use shell installer for Unix (Linux/macOS)
             log.debug("Installing uv using official Unix installer")
@@ -92,18 +322,43 @@ def install_uv_with_official_script(cache_dir):
             log.debug("uv installed at %s", uv_dest)
             return uv_dest
 
-        log.error("uv binary not found after installation")
-        return None
+def download_and_install_uv(
+    cache_dir, retries=DEFAULT_RETRIES, retry_delay=DEFAULT_RETRY_DELAY
+):
+    """Download and install uv package manager with retry on failure."""
+    uv_platform = get_uv_platform()
+    if not uv_platform:
+        raise exception.PIOInstallerException(
+            f"Unsupported OS/architecture for uv: "
+            f"{platform.system()}/{platform.machine()}"
+        )
 
-    except subprocess.CalledProcessError as e:
-        log.debug("Failed to install uv: %s", e)
-        return None
-    except subprocess.TimeoutExpired as e:
-        log.debug("Timeout installing uv: %s", e)
-        return None
-    except OSError as e:
-        log.exception("Unexpected error installing uv: %s", e)
-        return None
+    ext = "zip" if util.IS_WINDOWS else "tar.gz"
+    uv_url = UV_URL.format(platform=uv_platform, ext=ext)
+
+    archive_path, extract_dir = _prepare_download_dirs(cache_dir, uv_platform, ext)
+
+    config = DownloadConfig(uv_url, archive_path, uv_platform, ext)
+    config.set_checksum(get_expected_checksum(uv_platform, ext))
+
+    for attempt in range(1, retries + 1):
+        if not _attempt_download(config, attempt, retries):
+            if attempt < retries:
+                actual_delay = retry_delay * (2 ** (attempt - 1))
+                log.debug("Retrying in %d seconds...", actual_delay)
+                time.sleep(actual_delay)
+            continue
+        return _process_downloaded_archive(archive_path, extract_dir, cache_dir)
+
+    # Clean up on final failure
+    if os.path.exists(archive_path):
+        try:
+            os.remove(archive_path)
+        except OSError:
+            pass
+
+    log.error("Failed to download/install uv after %d attempts", retries)
+    return None
 
 
 def get_uv_executable():
