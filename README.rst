@@ -3,7 +3,7 @@ pioarduino Core Installer
 
 A standalone installer for `pioarduino Core` using modern Python packaging tools.
 
-**Important:** The installer checks for Python 3.10–3.13 and uses `uv` to install pioarduino core. If no compatible Python is found, it will install Python 3.13.
+**Important:** The installer requires Python 3.13 and uses `uv` to install pioarduino core. If Python 3.13 is not found, it will be installed automatically via `uv`.
 
 Features
 --------
@@ -11,12 +11,12 @@ Features
 * Fast installation using `uv` package manager
 * Isolated virtual environment creation
 * Cross-platform compatibility (Windows, macOS, Linux)
-* Python 3.10+ support
+* Automatic Python 3.13 installation via `uv` if not present
 
 Requirements
 ------------
 
-* Python 3.9 or newer for install
+* Python 3.13
 * Internet connection for downloading packages
 
 Development

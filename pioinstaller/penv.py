@@ -32,17 +32,15 @@ log = logging.getLogger(__name__)
 UV_INSTALL_SCRIPT_UNIX = "https://astral.sh/uv/install.sh"
 UV_INSTALL_SCRIPT_WINDOWS = "https://astral.sh/uv/install.ps1"
 
-# Python version to use
-PYTHON_VERSION = "3.13"
-
 # Platform-specific constants
+PYTHON_VERSION = "3.13"
 PYTHON_EXE = "python.exe" if util.IS_WINDOWS else "python"
 BIN_DIR = "Scripts" if util.IS_WINDOWS else "bin"
 UV_EXE = "uv.exe" if util.IS_WINDOWS else "uv"
 
 
 def install_uv_with_official_script(cache_dir):
-    """Install uv using official installation scripts."""
+    """Install uv using the official installer script."""
     uv_dest = os.path.join(cache_dir, UV_EXE)
 
     try:
@@ -51,7 +49,6 @@ def install_uv_with_official_script(cache_dir):
             log.debug("Installing uv using official Windows installer")
             env = os.environ.copy()
             env["UV_INSTALL_DIR"] = cache_dir
-
             cmd = [
                 "powershell",
                 "-ExecutionPolicy",
@@ -59,7 +56,6 @@ def install_uv_with_official_script(cache_dir):
                 "-Command",
                 f"irm {UV_INSTALL_SCRIPT_WINDOWS} | iex",
             ]
-
             subprocess.run(
                 cmd,
                 check=True,
@@ -69,13 +65,10 @@ def install_uv_with_official_script(cache_dir):
                 stderr=subprocess.PIPE,
             )
         else:
-            # Use shell installer for Unix (Linux/macOS)
             log.debug("Installing uv using official Unix installer")
             env = os.environ.copy()
             env["UV_INSTALL_DIR"] = cache_dir
-
             cmd = ["sh", "-c", f"curl -LsSf {UV_INSTALL_SCRIPT_UNIX} | sh"]
-
             subprocess.run(
                 cmd,
                 check=True,
@@ -85,25 +78,15 @@ def install_uv_with_official_script(cache_dir):
                 stderr=subprocess.PIPE,
             )
 
-        # Verify installation
         if os.path.isfile(uv_dest):
             if not util.IS_WINDOWS:
                 os.chmod(uv_dest, 0o755)
             log.debug("uv installed at %s", uv_dest)
             return uv_dest
+    except (subprocess.CalledProcessError, subprocess.TimeoutExpired, OSError) as e:
+        log.debug("Failed to install uv with official script: %s", e)
 
-        log.error("uv binary not found after installation")
-        return None
-
-    except subprocess.CalledProcessError as e:
-        log.debug("Failed to install uv: %s", e)
-        return None
-    except subprocess.TimeoutExpired as e:
-        log.debug("Timeout installing uv: %s", e)
-        return None
-    except OSError as e:
-        log.exception("Unexpected error installing uv: %s", e)
-        return None
+    return None
 
 
 def get_uv_executable():

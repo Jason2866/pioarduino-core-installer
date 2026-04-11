@@ -21,10 +21,10 @@ from pioinstaller import python
 
 
 @pytest.mark.skipif(
-    sys.version_info < (3, 10), reason="Runtime <3.10 used to test fallback flow"
+    sys.version_info[:2] != (3, 13), reason="Only Python 3.13 is supported"
 )
 def test_python_version_compatibility():
-    """Test that we correctly identify Python 3.10+ compatibility."""
+    """Test that we correctly identify Python 3.13 compatibility."""
 
     # Test the check function
     try:
@@ -34,7 +34,7 @@ def test_python_version_compatibility():
 
 
 def test_find_compatible_pythons():
-    """Test finding compatible Python executables."""
+    """Test finding compatible Python 3.13 executables."""
     pythons = python.find_compatible_pythons()
 
     # Should find at least the current Python
