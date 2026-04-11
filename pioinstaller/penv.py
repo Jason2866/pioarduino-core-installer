@@ -34,8 +34,7 @@ from pioinstaller import __version__, core, exception, python, util
 log = logging.getLogger(__name__)
 
 
-UV_URL = ("https://github.com/astral-sh/uv/releases/latest/download/"
-          "uv-{platform}.{ext}")
+UV_URL = "https://github.com/astral-sh/uv/releases/latest/download/uv-{platform}.{ext}"
 UV_API_URL = "https://api.github.com/repos/astral-sh/uv/releases/latest"
 
 # Download retry configuration
@@ -51,6 +50,7 @@ UV_EXE = "uv.exe" if util.IS_WINDOWS else "uv"
 @dataclass
 class DownloadConfig:
     """Configuration for uv download."""
+
     uv_url: str
     archive_path: str
     uv_platform: str
@@ -106,7 +106,8 @@ def detect_musl():
     ldd_path = shutil.which("ldd")
     methods = [
         lambda: bool(ldd_path)
-        and b"musl" in subprocess.check_output([ldd_path, "--version"], stderr=subprocess.STDOUT),
+        and b"musl"
+        in subprocess.check_output([ldd_path, "--version"], stderr=subprocess.STDOUT),
         lambda: os.path.exists("/lib/libc.musl-x86_64.so.1"),
         lambda: "musl" in os.environ.get("LD_LIBRARY_PATH", ""),
     ]
@@ -122,7 +123,7 @@ def detect_musl():
 
 def _parse_digest_string(digest_str):
     """Parse digest string from GitHub API.
-    
+
     GitHub returns digest as string like 'sha256:abc123...'
     Parse and return the hash value if it's SHA256.
     """
@@ -146,7 +147,7 @@ def fetch_uv_checksums_from_github():
     headers = {
         "Accept": "application/vnd.github+json",
         "User-Agent": f"PlatformIO-Installer/{__version__}",
-        "X-GitHub-Api-Version": "2022-11-28"
+        "X-GitHub-Api-Version": "2022-11-28",
     }
 
     try:
@@ -163,14 +164,21 @@ def fetch_uv_checksums_from_github():
                 digest_hash = _parse_digest_string(digest_str)
                 if digest_hash:
                     checksums[asset_name] = digest_hash
-                    log.debug("Found checksum for %s: %s", asset_name,
-                             digest_hash[:16] + "...")
+                    log.debug(
+                        "Found checksum for %s: %s",
+                        asset_name,
+                        digest_hash[:16] + "...",
+                    )
 
         log.debug("Fetched checksums for %d assets", len(checksums))
         return checksums
 
-    except (requests.RequestException, json.JSONDecodeError, KeyError,
-            AttributeError) as e:
+    except (
+        requests.RequestException,
+        json.JSONDecodeError,
+        KeyError,
+        AttributeError,
+    ) as e:
         log.warning("Failed to fetch checksums from GitHub API: %s", e)
         return {}
 
@@ -185,8 +193,10 @@ def get_expected_checksum(platform_name, ext):
 def verify_download(file_path, expected_sha256):
     """Verify downloaded file integrity."""
     if not expected_sha256:
-        log.warning("No checksum provided for %s, skipping verification",
-                    os.path.basename(file_path))
+        log.warning(
+            "No checksum provided for %s, skipping verification",
+            os.path.basename(file_path),
+        )
         return True
 
     sha256_hash = hashlib.sha256()
@@ -200,15 +210,17 @@ def verify_download(file_path, expected_sha256):
             expected = expected.split(":", 1)[1]
         is_valid = calculated_hash == expected
         if not is_valid:
-            log.error("Checksum mismatch for %s: expected %s, got %s",
-                      os.path.basename(file_path), expected,
-                      calculated_hash)
+            log.error(
+                "Checksum mismatch for %s: expected %s, got %s",
+                os.path.basename(file_path),
+                expected,
+                calculated_hash,
+            )
         else:
             log.debug("Checksum verified for %s", os.path.basename(file_path))
         return is_valid
     except OSError:
-        log.exception("Failed to verify checksum for %s",
-                      os.path.basename(file_path))
+        log.exception("Failed to verify checksum for %s", os.path.basename(file_path))
         return False
 
 
@@ -221,7 +233,8 @@ def _extract_uv_archive(archive_path, extract_dir):
                 dest = os.path.abspath(os.path.join(extract_dir, m.filename))
                 if not dest.startswith(base):
                     raise exception.PIOInstallerException(
-                        f"Unsafe path in archive entry: {m.filename}")
+                        f"Unsafe path in archive entry: {m.filename}"
+                    )
                 zf.extract(m, extract_dir)
     else:
         with tarfile.open(archive_path, "r:*") as tar:
@@ -230,7 +243,8 @@ def _extract_uv_archive(archive_path, extract_dir):
                 dest = os.path.abspath(os.path.join(extract_dir, m.name))
                 if not dest.startswith(base):
                     raise exception.PIOInstallerException(
-                        f"Unsafe path in archive entry: {m.name}")
+                        f"Unsafe path in archive entry: {m.name}"
+                    )
                 tar.extract(m, extract_dir)
 
 
@@ -275,8 +289,9 @@ def _process_downloaded_archive(archive_path, extract_dir, cache_dir):
 def _attempt_download(config, attempt, retries):
     """Attempt a single download with checksum verification."""
     try:
-        log.debug("Downloading uv from %s (attempt %d/%d)",
-                 config.uv_url, attempt, retries)
+        log.debug(
+            "Downloading uv from %s (attempt %d/%d)", config.uv_url, attempt, retries
+        )
 
         # Remove potentially corrupted file from previous attempt
         if os.path.exists(config.archive_path):
@@ -286,8 +301,7 @@ def _attempt_download(config, attempt, retries):
 
         # Verify checksum from GitHub API
         if config.is_checksum_available():
-            if not verify_download(config.archive_path,
-                                 config.expected_checksum):
+            if not verify_download(config.archive_path, config.expected_checksum):
                 raise exception.PIOInstallerException(
                     "Downloaded uv archive failed checksum verification"
                 )
@@ -305,8 +319,9 @@ def _attempt_download(config, attempt, retries):
         return False
 
 
-def download_and_install_uv(cache_dir, retries=DEFAULT_RETRIES,
-                          retry_delay=DEFAULT_RETRY_DELAY):
+def download_and_install_uv(
+    cache_dir, retries=DEFAULT_RETRIES, retry_delay=DEFAULT_RETRY_DELAY
+):
     """Download and install uv package manager with retry on failure."""
     uv_platform = get_uv_platform()
     if not uv_platform:
@@ -318,8 +333,7 @@ def download_and_install_uv(cache_dir, retries=DEFAULT_RETRIES,
     ext = "zip" if util.IS_WINDOWS else "tar.gz"
     uv_url = UV_URL.format(platform=uv_platform, ext=ext)
 
-    archive_path, extract_dir = _prepare_download_dirs(
-        cache_dir, uv_platform, ext)
+    archive_path, extract_dir = _prepare_download_dirs(cache_dir, uv_platform, ext)
 
     config = DownloadConfig(uv_url, archive_path, uv_platform, ext)
     config.set_checksum(get_expected_checksum(uv_platform, ext))
@@ -331,8 +345,7 @@ def download_and_install_uv(cache_dir, retries=DEFAULT_RETRIES,
                 log.debug("Retrying in %d seconds...", actual_delay)
                 time.sleep(actual_delay)
             continue
-        return _process_downloaded_archive(archive_path, extract_dir,
-                                         cache_dir)
+        return _process_downloaded_archive(archive_path, extract_dir, cache_dir)
 
     # Clean up on final failure
     if os.path.exists(archive_path):
@@ -415,8 +428,7 @@ def create_core_penv(penv_dir=None, ignore_pythons=None):
 
     python_exe = os.path.join(get_penv_bin_dir(penv_dir), PYTHON_EXE)
     init_state(python_exe, penv_dir)
-    click.echo("Virtual environment has been successfully created at %s!" %
-               penv_dir)
+    click.echo("Virtual environment has been successfully created at %s!" % penv_dir)
     return result_dir
 
 
@@ -487,12 +499,10 @@ def install_uv_in_venv_with_system_uv(system_uv_exe, penv_dir):
         log.debug("Successfully installed uv in venv")
     except subprocess.CalledProcessError as e:
         log.debug("Failed to install uv in venv: %s", e)
-        raise exception.PIOInstallerException(
-            "Could not install uv in penv") from e
+        raise exception.PIOInstallerException("Could not install uv in penv") from e
     except subprocess.TimeoutExpired as e:
         log.debug("Timeout installing uv in venv: %s", e)
-        raise exception.PIOInstallerException(
-            "Timeout installing uv in penv") from e
+        raise exception.PIOInstallerException("Timeout installing uv in penv") from e
 
 
 def init_state(python_exe, penv_dir):
@@ -504,9 +514,7 @@ def init_state(python_exe, penv_dir):
     try:
         python_version = (
             subprocess.check_output(
-                [python_exe, "-c", version_code],
-                stderr=subprocess.PIPE,
-                timeout=30
+                [python_exe, "-c", version_code], stderr=subprocess.PIPE, timeout=30
             )
             .decode()
             .strip()
@@ -514,7 +522,8 @@ def init_state(python_exe, penv_dir):
     except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as e:
         log.exception("Failed to get python version")
         raise exception.PIOInstallerException(
-            "Could not determine python version") from e
+            "Could not determine python version"
+        ) from e
 
     state = {
         "created_on": int(round(time.time())),
@@ -543,9 +552,7 @@ def load_state(penv_dir=None):
         with open(state_path, encoding="utf-8") as fp:
             return json.load(fp)
     except (OSError, json.JSONDecodeError) as e:
-        raise exception.PIOInstallerException(
-            f"Could not load state file: {e}"
-        ) from e
+        raise exception.PIOInstallerException(f"Could not load state file: {e}") from e
 
 
 def save_state(state, penv_dir=None):
@@ -557,6 +564,4 @@ def save_state(state, penv_dir=None):
             json.dump(state, fp, indent=2)
         return state_path
     except OSError as e:
-        raise exception.PIOInstallerException(
-            f"Could not save state file: {e}"
-        ) from e
+        raise exception.PIOInstallerException(f"Could not save state file: {e}") from e

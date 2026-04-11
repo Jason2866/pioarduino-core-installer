@@ -201,9 +201,7 @@ def find_compatible_pythons(ignore_pythons=None, raise_exception=True):
 
     if not result and raise_exception:
         # Try to install Python 3.13 using uv
-        log.debug(
-            "No Python 3.13 found, attempting to install Python 3.13 using uv"
-        )
+        log.debug("No Python 3.13 found, attempting to install Python 3.13 using uv")
         try:
             python_exe = fetch_portable_python(None)
             if python_exe and _is_python_compatible(python_exe):
