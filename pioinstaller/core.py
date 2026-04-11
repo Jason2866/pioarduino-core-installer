@@ -46,7 +46,7 @@ def _get_release_url():
         import requests
     except ImportError as exc:
         log.debug("Falling back to pinned core URL due to missing requests: %s", exc)
-        url = "https://github.com/pioarduino/platformio-core/archive/refs/tags/v6.1.18.zip"
+        url = "https://github.com/pioarduino/platformio-core/archive/refs/tags/v6.1.19.zip"
         _get_release_url._cache = url
         return url
 
@@ -60,7 +60,7 @@ def _get_release_url():
             raise KeyError("tag_name missing")
     except (requests.RequestException, KeyError) as exc:
         log.debug("Falling back to pinned core URL due to: %s", exc)
-        url = "https://github.com/pioarduino/platformio-core/archive/refs/tags/v6.1.18.zip"
+        url = "https://github.com/pioarduino/platformio-core/archive/refs/tags/v6.1.19.zip"
     # pylint: disable=protected-access
     _get_release_url._cache = url
     return url
