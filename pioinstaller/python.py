@@ -13,7 +13,6 @@
 # limitations under the License.
 
 import glob
-import json
 import logging
 import os
 import platform
@@ -41,40 +40,6 @@ def is_conda():
             "conda" in sys.version.lower(),
         ]
     )
-
-
-def is_portable():
-    """
-    Check if the current Python is portable and compatible (3.13 only).
-    Returns True if compatible (including WinPython), otherwise False.
-    """
-    try:
-        __import__("winpython")
-        return True
-    except ImportError:
-        pass
-
-    if _is_python_compatible(sys.executable):
-        log.debug("Current Python executable is compatible: %s", sys.executable)
-        return True
-
-    python_dir = os.path.dirname(sys.executable)
-    if not util.IS_WINDOWS:
-        # skip "bin" folder for non-Windows platforms
-        python_dir = os.path.dirname(python_dir)
-
-    # Check for Python manifest file
-    manifest_path = os.path.join(python_dir, "package.json")
-    if not os.path.isfile(manifest_path):
-        return False
-
-    try:
-        with open(manifest_path, encoding="utf-8") as fp:
-            return json.load(fp).get("name") == "python-portable"
-    except (ValueError, UnicodeDecodeError):
-        pass
-
-    return False
 
 
 def fetch_portable_python(_dst):
@@ -106,21 +71,6 @@ def fetch_portable_python(_dst):
     except (subprocess.CalledProcessError, FileNotFoundError) as exc:
         log.debug("Could not install Python 3.13 using uv: %s", exc)
         return None
-
-
-def get_portable_python_url():
-    """
-    Compatibility stub, not needed anymore with uv.
-    Always returns None.
-    """
-    return None
-
-
-def is_version_system_compatible(_version, _systype):
-    """
-    Compatibility check. Always returns True since uv handles compatibility.
-    """
-    return True
 
 
 def check():
