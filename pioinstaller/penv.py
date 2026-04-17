@@ -14,15 +14,19 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 import os
 import platform
 import shutil
 import subprocess
+import tempfile
 import time
+import zipfile
 
 import click
+import requests
 
 from pioinstaller import __version__, core, exception, util
 
@@ -59,12 +63,15 @@ def install_uv_with_official_script(cache_dir):
             subprocess.run(
                 cmd,
                 check=True,
-                timeout=300,
+                timeout=900,
                 env=env,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
             )
         else:
+            if not shutil.which("curl"):
+                log.debug("curl not found in PATH, cannot download uv installer")
+                return None
             log.debug("Installing uv using official Unix installer")
             env = os.environ.copy()
             env["UV_UNMANAGED_INSTALL"] = cache_dir
@@ -72,7 +79,7 @@ def install_uv_with_official_script(cache_dir):
             subprocess.run(
                 cmd,
                 check=True,
-                timeout=300,
+                timeout=900,
                 env=env,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
@@ -87,6 +94,141 @@ def install_uv_with_official_script(cache_dir):
         log.debug("Failed to install uv with official script: %s", e)
 
     return None
+
+
+def _get_uv_platform_tag():
+    """Return the uv release asset platform tag for the current system."""
+    system = platform.system().lower()
+    machine = platform.machine().lower()
+
+    if system == "darwin":
+        arch_map = {"arm64": "aarch64", "aarch64": "aarch64", "x86_64": "x86_64"}
+        arch = arch_map.get(machine)
+        if arch:
+            return f"uv-{arch}-apple-darwin"
+    elif system == "linux":
+        # Detect libc to choose musl vs gnu builds
+        libc_name = (platform.libc_ver()[0] or "").lower()
+        is_musl = "musl" in libc_name
+        if not libc_name:
+            # platform.libc_ver() returns ("", "") on musl; cross-check ldd
+            try:
+                out = subprocess.run(
+                    ["ldd", "--version"],
+                    capture_output=True,
+                    text=True,
+                    timeout=5,
+                    check=False,
+                )
+                is_musl = "musl" in (out.stdout + out.stderr).lower()
+            except (OSError, subprocess.SubprocessError):
+                is_musl = False
+        # (rust arch token, abi suffix)
+        arch_map = {
+            "x86_64": ("x86_64", "musl" if is_musl else "gnu"),
+            "aarch64": ("aarch64", "musl" if is_musl else "gnu"),
+            "armv7l": ("armv7", "musleabihf" if is_musl else "gnueabihf"),
+            "i686": ("i686", "musl" if is_musl else "gnu"),
+            "ppc64le": ("powerpc64le", "gnu"),  # no musl build published
+            "s390x": ("s390x", "gnu"),
+        }
+        entry = arch_map.get(machine)
+        if entry:
+            arch, suffix = entry
+            return f"uv-{arch}-unknown-linux-{suffix}"
+    elif system == "windows":
+        if machine in ("amd64", "x86_64"):
+            return "uv-x86_64-pc-windows-msvc"
+        if machine in ("arm64", "aarch64"):
+            return "uv-aarch64-pc-windows-msvc"
+
+    return None
+
+
+UV_DOWNLOAD_VERSION = "0.11.6"
+
+
+def _sha256_hex(path):
+    """Return lowercase hex SHA-256 digest of a file."""
+    digest = hashlib.sha256()
+    with open(path, "rb") as fp:
+        for chunk in iter(lambda: fp.read(8192), b""):
+            digest.update(chunk)
+    return digest.hexdigest().lower()
+
+
+def _verify_and_extract_uv(archive_path, archive_name, url, extract_dir, uv_dest):
+    """Verify sha256 and extract uv binary; return uv_dest on success, None otherwise."""
+    sha_resp = requests.get(f"{url}.sha256", timeout=30)
+    sha_resp.raise_for_status()
+    expected = sha_resp.text.split()[0].strip().lower()
+    if _sha256_hex(archive_path) != expected:
+        log.debug("uv archive sha256 mismatch")
+        return None
+
+    os.makedirs(extract_dir)
+    if archive_name.endswith(".zip"):
+        with zipfile.ZipFile(archive_path) as zf:
+            zf.extractall(extract_dir)
+    else:
+        util.unpack_archive(archive_path, extract_dir)
+
+    uv_binary = util.find_file(UV_EXE, extract_dir)
+    if not uv_binary:
+        log.debug("uv binary not found in downloaded archive")
+        return None
+
+    shutil.copy2(uv_binary, uv_dest)
+    if not util.IS_WINDOWS:
+        os.chmod(uv_dest, 0o755)
+    return uv_dest
+
+
+def install_uv_download(cache_dir):
+    """Download uv binary directly from GitHub releases using Python (requests)."""
+
+    tag = _get_uv_platform_tag()
+    if not tag:
+        log.debug(
+            "Unsupported platform for direct uv download: %s/%s",
+            platform.system(),
+            platform.machine(),
+        )
+        return None
+
+    uv_dest = os.path.join(cache_dir, UV_EXE)
+    archive_name = f"{tag}.zip" if util.IS_WINDOWS else f"{tag}.tar.gz"
+    url = f"https://github.com/astral-sh/uv/releases/download/{UV_DOWNLOAD_VERSION}/{archive_name}"
+    log.debug("Downloading uv from %s", url)
+
+    try:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            archive_path = os.path.join(tmpdir, archive_name)
+            with requests.get(
+                url, stream=True, timeout=300, allow_redirects=True
+            ) as resp:
+                resp.raise_for_status()
+                with open(archive_path, "wb") as fp:
+                    for chunk in resp.iter_content(chunk_size=8192):
+                        if chunk:
+                            fp.write(chunk)
+
+            result = _verify_and_extract_uv(
+                archive_path,
+                archive_name,
+                url,
+                os.path.join(tmpdir, "extract"),
+                uv_dest,
+            )
+            if not result:
+                return None
+
+        log.debug("uv downloaded and installed at %s", uv_dest)
+        return uv_dest
+
+    except Exception as e:  # pylint: disable=broad-except
+        log.debug("Failed to download uv directly: %s", e)
+        return None
 
 
 def get_uv_executable():
@@ -105,10 +247,17 @@ def get_uv_executable():
         log.debug("Found cached uv: %s", cached_uv)
         return cached_uv
 
-    # Install uv using official script
+    # Install uv using official script (requires curl on Unix)
     uv_exe = install_uv_with_official_script(cache_dir)
     if uv_exe:
         log.info("uv installed at %s", uv_exe)
+        return uv_exe
+
+    # Fallback: download uv binary directly using Python (no curl needed)
+    log.debug("Falling back to direct Python download of uv")
+    uv_exe = install_uv_download(cache_dir)
+    if uv_exe:
+        log.info("uv downloaded at %s", uv_exe)
         return uv_exe
 
     return None
@@ -129,16 +278,9 @@ def get_penv_bin_dir(path=None):
     return os.path.join(penv_dir, BIN_DIR)
 
 
-def create_core_penv(penv_dir=None):
+def create_core_penv(uv_exe, penv_dir=None):
     """Create PlatformIO core virtual environment."""
     penv_dir = penv_dir or get_penv_dir()
-
-    # Get uv executable
-    uv_exe = get_uv_executable()
-    if not uv_exe:
-        raise exception.PIOInstallerException(
-            "uv package manager is required. Please install uv first."
-        )
 
     # Ensure uv is resolvable via PATH for helpers that shell out to "uv"
     uv_dir = os.path.dirname(uv_exe)
@@ -176,13 +318,15 @@ def create_venv_with_uv(uv_exe, penv_dir):
             "--python-preference",
             "managed",
         ]
-        subprocess.run(
+        result = subprocess.run(
             cmd,
             check=True,
-            timeout=300,  # 5 minutes timeout
-            stdout=subprocess.DEVNULL,
+            timeout=900,  # 15 minutes timeout
+            text=True,
+            stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
         )
+        log.debug("uv venv output: %s", result.stdout)
 
         # Verify the venv was created
         expected_python = os.path.join(get_penv_bin_dir(penv_dir), PYTHON_EXE)
@@ -192,17 +336,13 @@ def create_venv_with_uv(uv_exe, penv_dir):
                 penv_dir,
                 PYTHON_VERSION,
             )
-
-            # Make uv CLI available inside the venv
-            install_uv_in_venv_with_system_uv(uv_exe, penv_dir)
-
             return penv_dir
 
         log.debug("Expected python not found at %s", expected_python)
         return None
 
     except subprocess.CalledProcessError as e:
-        log.debug("Failed to create venv with uv: %s", str(e))
+        log.debug("Failed to create venv with uv: %s\nOutput: %s", e, e.stdout)
         return None
     except subprocess.TimeoutExpired as e:
         log.debug("Timeout creating venv with uv: %s", str(e))
@@ -219,26 +359,24 @@ def install_uv_in_venv_with_system_uv(system_uv_exe, penv_dir):
     """
     Use the system uv executable to install uv inside the penv venv.
     """
-    # Set VIRTUAL_ENV to target the penv directory
-    env = os.environ.copy()
-    env["VIRTUAL_ENV"] = penv_dir
-
     venv_python = os.path.join(get_penv_bin_dir(penv_dir), PYTHON_EXE)
     cmd = [system_uv_exe, "pip", "install", "--python", venv_python, "uv"]
 
     try:
-        subprocess.run(
+        result = subprocess.run(
             cmd,
             check=True,
-            timeout=120,  # 2 minutes timeout
-            stdout=subprocess.DEVNULL,
+            timeout=300,  # 5 minutes timeout
+            text=True,
+            stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
-            env=env,
         )
-        log.debug("Successfully installed uv in venv")
+        log.debug("Successfully installed uv in venv: %s", result.stdout)
     except subprocess.CalledProcessError as e:
-        log.debug("Failed to install uv in venv: %s", e)
-        raise exception.PIOInstallerException("Could not install uv in penv") from e
+        log.debug("Failed to install uv in venv: %s\nOutput: %s", e, e.stdout)
+        raise exception.PIOInstallerException(
+            "Could not install uv in penv: %s" % (e.stdout or e)
+        ) from e
     except subprocess.TimeoutExpired as e:
         log.debug("Timeout installing uv in venv: %s", e)
         raise exception.PIOInstallerException("Timeout installing uv in penv") from e

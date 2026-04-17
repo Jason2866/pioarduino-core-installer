@@ -24,8 +24,10 @@ from pioinstaller import __version__, penv, util
 def test_penv_creation_with_uv(tmpdir):
     """Test basic virtual environment creation using uv."""
     penv_dir = str(tmpdir.mkdir("penv"))
+    uv_exe = penv.get_uv_executable()
+    assert uv_exe is not None, "uv executable not found"
 
-    assert penv.create_core_penv(penv_dir=penv_dir) == penv_dir
+    assert penv.create_core_penv(uv_exe, penv_dir=penv_dir) == penv_dir
 
     # Verify the virtual environment was created
     assert os.path.isdir(penv_dir)
@@ -66,9 +68,37 @@ def test_uv_installed_in_penv(prepared_penv):
 @pytest.fixture(scope="module")
 def prepared_penv(tmp_path_factory):
     penv_dir = str(tmp_path_factory.mktemp("penv"))
-    result_dir = penv.create_core_penv(penv_dir=penv_dir)
+    uv_exe = penv.get_uv_executable()
+    assert uv_exe is not None, "uv executable not found"
+    result_dir = penv.create_core_penv(uv_exe, penv_dir=penv_dir)
     assert result_dir == penv_dir
+    # Install uv in the penv like the full install flow does
+    penv.install_uv_in_venv_with_system_uv(uv_exe, penv_dir)
     return penv_dir
+
+
+def test_uv_platform_tag():
+    """Test that _get_uv_platform_tag returns a valid tag for the current platform."""
+    tag = penv._get_uv_platform_tag()
+    assert tag is not None, "No platform tag for current system"
+    assert tag.startswith("uv-")
+
+
+def test_install_uv_download(tmpdir):
+    """Test the requests-based fallback downloads a working uv binary."""
+    cache_dir = str(tmpdir.mkdir("cache"))
+    uv_path = penv.install_uv_download(cache_dir)
+
+    assert uv_path is not None, "install_uv_download returned None"
+    assert os.path.isfile(uv_path)
+    assert os.path.getsize(uv_path) > 0
+
+    # Verify the downloaded binary actually works
+    result = subprocess.run(
+        [uv_path, "--version"], capture_output=True, text=True, timeout=10
+    )
+    assert result.returncode == 0
+    assert "uv" in result.stdout.lower()
 
 
 def test_uv_help_in_existing_penv(prepared_penv):
