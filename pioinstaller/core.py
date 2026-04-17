@@ -115,7 +115,10 @@ def _install_platformio_core(shutdown_piohome=True, develop=False):
     _install_with_uv(uv_exe, penv_dir, develop)
 
     # Install uv in the penv for future use (best-effort, non-critical)
-    penv.install_uv_in_venv_with_system_uv(uv_exe, penv_dir)
+    try:
+        penv.install_uv_in_venv_with_system_uv(uv_exe, penv_dir)
+    except exception.PIOInstallerException as exc:
+        log.warning("Could not install uv into penv (non-fatal): %s", exc)
 
     _post_install_message(penv_dir)
     return True

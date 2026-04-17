@@ -62,7 +62,7 @@ def install_uv_with_official_script(cache_dir):
             subprocess.run(
                 cmd,
                 check=True,
-                timeout=300,
+                timeout=900,
                 env=env,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
@@ -78,7 +78,7 @@ def install_uv_with_official_script(cache_dir):
             subprocess.run(
                 cmd,
                 check=True,
-                timeout=300,
+                timeout=900,
                 env=env,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
@@ -106,6 +106,9 @@ def _get_uv_platform_tag():
         if arch:
             return f"uv-{arch}-apple-darwin"
     elif system == "linux":
+        # Detect libc to choose musl vs gnu builds
+        libc_name = (platform.libc_ver()[0] or "").lower()
+        libc_suffix = "unknown-linux-musl" if "musl" in libc_name else "unknown-linux-gnu"
         arch_map = {
             "x86_64": "x86_64",
             "aarch64": "aarch64",
@@ -116,7 +119,7 @@ def _get_uv_platform_tag():
         }
         arch = arch_map.get(machine)
         if arch:
-            return f"uv-{arch}-unknown-linux-gnu"
+            return f"uv-{arch}-{libc_suffix}"
     elif system == "windows":
         if machine in ("amd64", "x86_64"):
             return "uv-x86_64-pc-windows-msvc"
@@ -151,7 +154,7 @@ def install_uv_download(cache_dir):
     try:
         with tempfile.TemporaryDirectory() as tmpdir:
             archive_path = os.path.join(tmpdir, archive_name)
-            resp = requests.get(url, stream=True, timeout=120, allow_redirects=True)
+            resp = requests.get(url, stream=True, timeout=300, allow_redirects=True)
             resp.raise_for_status()
             with open(archive_path, "wb") as fp:
                 for chunk in resp.iter_content(chunk_size=8192):
@@ -275,7 +278,7 @@ def create_venv_with_uv(uv_exe, penv_dir):
         result = subprocess.run(
             cmd,
             check=True,
-            timeout=300,  # 5 minutes timeout
+            timeout=900,  # 15 minutes timeout
             text=True,
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
@@ -320,7 +323,7 @@ def install_uv_in_venv_with_system_uv(system_uv_exe, penv_dir):
         result = subprocess.run(
             cmd,
             check=True,
-            timeout=120,  # 2 minutes timeout
+            timeout=300,  # 5 minutes timeout
             text=True,
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
