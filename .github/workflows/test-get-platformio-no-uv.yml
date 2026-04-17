@@ -5,6 +5,39 @@ on:
   push:
 
 jobs:
+  test-uv-download-fallback:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, ubuntu-24.04-arm]
+        python-version: ["3.9", "3.10", "3.11", "3.12", "3.13", "3.14"]
+    name: Test uv download fallback (no curl / musl path)
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v6
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v6
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Ensure uv is not installed
+        run: |
+          pip uninstall -y uv || true
+          if python -m uv --version 2>/dev/null; then exit 1; fi
+        shell: bash
+      - name: Mask curl from PATH to force install_uv_download() fallback
+        run: |
+          mkdir -p "$HOME/.bin-mask"
+          # Provide a stub that always fails so install_uv_with_official_script returns None
+          printf '#!/bin/sh\nexit 127\n' > "$HOME/.bin-mask/curl"
+          chmod +x "$HOME/.bin-mask/curl"
+          echo "$HOME/.bin-mask" >> "$GITHUB_PATH"
+        shell: bash
+      - name: Run get-platformio.py (must use install_uv_download fallback)
+        run: python get-platformio.py
+        shell: bash
+      - name: Verify uv is installed in PlatformIO penv
+        run: ~/.platformio/penv/bin/uv --help
+        shell: bash
+
   test:
     strategy:
       matrix:
