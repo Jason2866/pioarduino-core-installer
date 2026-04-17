@@ -182,12 +182,14 @@ def install_uv_download(cache_dir):
     try:
         with tempfile.TemporaryDirectory() as tmpdir:
             archive_path = os.path.join(tmpdir, archive_name)
-            resp = requests.get(url, stream=True, timeout=300, allow_redirects=True)
-            resp.raise_for_status()
-            with open(archive_path, "wb") as fp:
-                for chunk in resp.iter_content(chunk_size=8192):
-                    if chunk:
-                        fp.write(chunk)
+            with requests.get(
+                url, stream=True, timeout=300, allow_redirects=True
+            ) as resp:
+                resp.raise_for_status()
+                with open(archive_path, "wb") as fp:
+                    for chunk in resp.iter_content(chunk_size=8192):
+                        if chunk:
+                            fp.write(chunk)
 
             expected = (
                 requests.get(f"{url}.sha256", timeout=30)
