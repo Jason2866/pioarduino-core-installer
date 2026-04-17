@@ -20,7 +20,7 @@ jobs:
             python-version: "3.10"
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - name: Remove Homebrew Python (macOS)
         if: runner.os == 'macOS'
         run: |
@@ -37,11 +37,11 @@ jobs:
           sudo rm -f /usr/local/bin/python* /usr/local/bin/pip* /usr/local/bin/2to3*
         shell: bash
       - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: ${{ matrix.python-version }}
       - name: Install uv
-        uses: astral-sh/setup-uv@v4
+        uses: astral-sh/setup-uv@v8
         with:
           enable-cache: true
           cache-dependency-glob: |
