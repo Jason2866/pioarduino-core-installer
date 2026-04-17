@@ -109,20 +109,33 @@ def _get_uv_platform_tag():
     elif system == "linux":
         # Detect libc to choose musl vs gnu builds
         libc_name = (platform.libc_ver()[0] or "").lower()
-        libc_suffix = (
-            "unknown-linux-musl" if "musl" in libc_name else "unknown-linux-gnu"
-        )
+        is_musl = "musl" in libc_name
+        if not libc_name:
+            # platform.libc_ver() returns ("", "") on musl; cross-check ldd
+            try:
+                out = subprocess.run(
+                    ["ldd", "--version"],
+                    capture_output=True,
+                    text=True,
+                    timeout=5,
+                    check=False,
+                )
+                is_musl = "musl" in (out.stdout + out.stderr).lower()
+            except (OSError, subprocess.SubprocessError):
+                is_musl = False
+        # (rust arch token, abi suffix)
         arch_map = {
-            "x86_64": "x86_64",
-            "aarch64": "aarch64",
-            "armv7l": "armv7",
-            "i686": "i686",
-            "ppc64le": "powerpc64le",
-            "s390x": "s390x",
+            "x86_64": ("x86_64", "musl" if is_musl else "gnu"),
+            "aarch64": ("aarch64", "musl" if is_musl else "gnu"),
+            "armv7l": ("armv7", "musleabihf" if is_musl else "gnueabihf"),
+            "i686": ("i686", "musl" if is_musl else "gnu"),
+            "ppc64le": ("powerpc64le", "gnu"),  # no musl build published
+            "s390x": ("s390x", "gnu"),
         }
-        arch = arch_map.get(machine)
-        if arch:
-            return f"uv-{arch}-{libc_suffix}"
+        entry = arch_map.get(machine)
+        if entry:
+            arch, suffix = entry
+            return f"uv-{arch}-unknown-linux-{suffix}"
     elif system == "windows":
         if machine in ("amd64", "x86_64"):
             return "uv-x86_64-pc-windows-msvc"
@@ -176,7 +189,12 @@ def install_uv_download(cache_dir):
                     if chunk:
                         fp.write(chunk)
 
-            expected = requests.get(f"{url}.sha256", timeout=30).text.split()[0].strip().lower()
+            expected = (
+                requests.get(f"{url}.sha256", timeout=30)
+                .text.split()[0]
+                .strip()
+                .lower()
+            )
             if _sha256_hex(archive_path) != expected:
                 log.debug("uv archive sha256 mismatch")
                 return None
