@@ -29,41 +29,10 @@ from pioinstaller import __version__, exception, home, util
 
 log = logging.getLogger(__name__)
 
-PIO_CORE_API_URL = (
-    "https://api.github.com/repos/pioarduino/platformio-core/releases/latest"
-)
+PIO_CORE_PYPI_PACKAGE = "pioarduino"
 PIO_CORE_DEVELOP_URL = (
     "https://github.com/pioarduino/platformio-core/archive/pioarduino.zip"
 )
-
-
-def _get_release_url():
-    """Resolve latest release zip URL lazily with fallback and cache."""
-    # pylint: disable=protected-access
-    if hasattr(_get_release_url, "_cache"):
-        return _get_release_url._cache
-    try:
-        import requests
-    except ImportError as exc:
-        log.debug("Falling back to pinned core URL due to missing requests: %s", exc)
-        url = "https://github.com/pioarduino/platformio-core/archive/refs/tags/v6.1.19.zip"
-        _get_release_url._cache = url
-        return url
-
-    try:
-        resp = requests.get(PIO_CORE_API_URL, timeout=5)
-        resp.raise_for_status()
-        tag_name = resp.json().get("tag_name")
-        if tag_name:
-            url = f"https://github.com/pioarduino/platformio-core/archive/refs/tags/{tag_name}.zip"
-        else:
-            raise KeyError("tag_name missing")
-    except (requests.RequestException, KeyError) as exc:
-        log.debug("Falling back to pinned core URL due to: %s", exc)
-        url = "https://github.com/pioarduino/platformio-core/archive/refs/tags/v6.1.19.zip"
-    # pylint: disable=protected-access
-    _get_release_url._cache = url
-    return url
 
 
 UPDATE_INTERVAL = 60 * 60 * 24 * 31  # 31 days
@@ -156,32 +125,26 @@ def _install_with_uv(uv_exe, penv_dir, develop):
     """Install platformio core using uv."""
     from pioinstaller import penv
 
+    venv_python = os.path.join(
+        penv.get_penv_bin_dir(penv_dir),
+        "python.exe" if util.IS_WINDOWS else "python",
+    )
+
     if develop:
         click.echo("Installing a development version of pioarduino Core using uv")
-        command = [
-            uv_exe,
-            "pip",
-            "install",
-            "--python",
-            os.path.join(
-                penv.get_penv_bin_dir(penv_dir),
-                "python.exe" if util.IS_WINDOWS else "python",
-            ),
-            PIO_CORE_DEVELOP_URL,
-        ]
+        package_spec = PIO_CORE_DEVELOP_URL
     else:
         click.echo("Installing pioarduino Core using uv")
-        command = [
-            uv_exe,
-            "pip",
-            "install",
-            "--python",
-            os.path.join(
-                penv.get_penv_bin_dir(penv_dir),
-                "python.exe" if util.IS_WINDOWS else "python",
-            ),
-            _get_release_url(),
-        ]
+        package_spec = PIO_CORE_PYPI_PACKAGE
+
+    command = [
+        uv_exe,
+        "pip",
+        "install",
+        "--python",
+        venv_python,
+        package_spec,
+    ]
 
     log.debug("Running: %s", " ".join(command))
     try:
