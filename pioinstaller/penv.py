@@ -25,6 +25,7 @@ import time
 import zipfile
 
 import click
+import requests
 
 from pioinstaller import __version__, core, exception, util
 
@@ -127,7 +128,6 @@ def _get_uv_platform_tag():
 
 def install_uv_download(cache_dir):
     """Download uv binary directly from GitHub releases using Python (requests)."""
-    import requests
 
     tag = _get_uv_platform_tag()
     if not tag:
