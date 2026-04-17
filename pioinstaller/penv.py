@@ -14,6 +14,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 import os
@@ -108,7 +109,9 @@ def _get_uv_platform_tag():
     elif system == "linux":
         # Detect libc to choose musl vs gnu builds
         libc_name = (platform.libc_ver()[0] or "").lower()
-        libc_suffix = "unknown-linux-musl" if "musl" in libc_name else "unknown-linux-gnu"
+        libc_suffix = (
+            "unknown-linux-musl" if "musl" in libc_name else "unknown-linux-gnu"
+        )
         arch_map = {
             "x86_64": "x86_64",
             "aarch64": "aarch64",
@@ -127,6 +130,18 @@ def _get_uv_platform_tag():
             return "uv-aarch64-pc-windows-msvc"
 
     return None
+
+
+UV_DOWNLOAD_VERSION = "0.11.6"
+
+
+def _sha256_hex(path):
+    """Return lowercase hex SHA-256 digest of a file."""
+    digest = hashlib.sha256()
+    with open(path, "rb") as fp:
+        for chunk in iter(lambda: fp.read(8192), b""):
+            digest.update(chunk)
+    return digest.hexdigest().lower()
 
 
 def install_uv_download(cache_dir):
@@ -148,7 +163,7 @@ def install_uv_download(cache_dir):
     else:
         archive_name = f"{tag}.tar.gz"
 
-    url = f"https://github.com/astral-sh/uv/releases/latest/download/{archive_name}"
+    url = f"https://github.com/astral-sh/uv/releases/download/{UV_DOWNLOAD_VERSION}/{archive_name}"
     log.debug("Downloading uv from %s", url)
 
     try:
@@ -160,6 +175,11 @@ def install_uv_download(cache_dir):
                 for chunk in resp.iter_content(chunk_size=8192):
                     if chunk:
                         fp.write(chunk)
+
+            expected = requests.get(f"{url}.sha256", timeout=30).text.split()[0].strip().lower()
+            if _sha256_hex(archive_path) != expected:
+                log.debug("uv archive sha256 mismatch")
+                return None
 
             extract_dir = os.path.join(tmpdir, "extract")
             os.makedirs(extract_dir)
