@@ -157,6 +157,33 @@ def _sha256_hex(path):
     return digest.hexdigest().lower()
 
 
+def _verify_and_extract_uv(archive_path, archive_name, url, extract_dir, uv_dest):
+    """Verify sha256 and extract uv binary; return uv_dest on success, None otherwise."""
+    sha_resp = requests.get(f"{url}.sha256", timeout=30)
+    sha_resp.raise_for_status()
+    expected = sha_resp.text.split()[0].strip().lower()
+    if _sha256_hex(archive_path) != expected:
+        log.debug("uv archive sha256 mismatch")
+        return None
+
+    os.makedirs(extract_dir)
+    if archive_name.endswith(".zip"):
+        with zipfile.ZipFile(archive_path) as zf:
+            zf.extractall(extract_dir)
+    else:
+        util.unpack_archive(archive_path, extract_dir)
+
+    uv_binary = util.find_file(UV_EXE, extract_dir)
+    if not uv_binary:
+        log.debug("uv binary not found in downloaded archive")
+        return None
+
+    shutil.copy2(uv_binary, uv_dest)
+    if not util.IS_WINDOWS:
+        os.chmod(uv_dest, 0o755)
+    return uv_dest
+
+
 def install_uv_download(cache_dir):
     """Download uv binary directly from GitHub releases using Python (requests)."""
 
@@ -170,12 +197,7 @@ def install_uv_download(cache_dir):
         return None
 
     uv_dest = os.path.join(cache_dir, UV_EXE)
-
-    if util.IS_WINDOWS:
-        archive_name = f"{tag}.zip"
-    else:
-        archive_name = f"{tag}.tar.gz"
-
+    archive_name = f"{tag}.zip" if util.IS_WINDOWS else f"{tag}.tar.gz"
     url = f"https://github.com/astral-sh/uv/releases/download/{UV_DOWNLOAD_VERSION}/{archive_name}"
     log.debug("Downloading uv from %s", url)
 
@@ -191,34 +213,15 @@ def install_uv_download(cache_dir):
                         if chunk:
                             fp.write(chunk)
 
-            expected = (
-                requests.get(f"{url}.sha256", timeout=30)
-                .text.split()[0]
-                .strip()
-                .lower()
+            result = _verify_and_extract_uv(
+                archive_path,
+                archive_name,
+                url,
+                os.path.join(tmpdir, "extract"),
+                uv_dest,
             )
-            if _sha256_hex(archive_path) != expected:
-                log.debug("uv archive sha256 mismatch")
+            if not result:
                 return None
-
-            extract_dir = os.path.join(tmpdir, "extract")
-            os.makedirs(extract_dir)
-
-            if archive_name.endswith(".zip"):
-                with zipfile.ZipFile(archive_path) as zf:
-                    zf.extractall(extract_dir)
-            else:
-                util.unpack_archive(archive_path, extract_dir)
-
-            # Find the uv binary in extracted files
-            uv_binary = util.find_file(UV_EXE, extract_dir)
-            if not uv_binary:
-                log.debug("uv binary not found in downloaded archive")
-                return None
-
-            shutil.copy2(uv_binary, uv_dest)
-            if not util.IS_WINDOWS:
-                os.chmod(uv_dest, 0o755)
 
         log.debug("uv downloaded and installed at %s", uv_dest)
         return uv_dest
