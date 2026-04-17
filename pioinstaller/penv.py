@@ -48,7 +48,7 @@ def install_uv_with_official_script(cache_dir):
             # Use PowerShell installer for Windows
             log.debug("Installing uv using official Windows installer")
             env = os.environ.copy()
-            env["UV_INSTALL_DIR"] = cache_dir
+            env["UV_UNMANAGED_INSTALL"] = cache_dir
             cmd = [
                 "powershell",
                 "-ExecutionPolicy",
@@ -67,7 +67,7 @@ def install_uv_with_official_script(cache_dir):
         else:
             log.debug("Installing uv using official Unix installer")
             env = os.environ.copy()
-            env["UV_INSTALL_DIR"] = cache_dir
+            env["UV_UNMANAGED_INSTALL"] = cache_dir
             cmd = ["sh", "-c", f"curl -LsSf {UV_INSTALL_SCRIPT_UNIX} | sh"]
             subprocess.run(
                 cmd,
