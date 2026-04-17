@@ -131,8 +131,11 @@ def install_uv_download(cache_dir):
 
     tag = _get_uv_platform_tag()
     if not tag:
-        log.debug("Unsupported platform for direct uv download: %s/%s",
-                  platform.system(), platform.machine())
+        log.debug(
+            "Unsupported platform for direct uv download: %s/%s",
+            platform.system(),
+            platform.machine(),
+        )
         return None
 
     uv_dest = os.path.join(cache_dir, UV_EXE)

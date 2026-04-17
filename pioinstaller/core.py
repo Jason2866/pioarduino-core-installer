@@ -161,7 +161,6 @@ def _install_with_uv(uv_exe, penv_dir, develop):
         ) from e
 
 
-
 def _post_install_message(penv_dir):
     """Display post-installation success message."""
     from pioinstaller import penv
