@@ -270,13 +270,13 @@ def get_uv_executable():
     # Primary: download uv binary directly using Python/requests into cache_dir
     # This gives full control over the install path (no ~/.local/bin/ issues)
     uv_exe = install_uv_download(cache_dir)
-    if uv_exe:
+    if uv_exe and _validate_uv(uv_exe):
         log.info("uv downloaded at %s", uv_exe)
         return uv_exe
 
     # Fallback: official installer script (requires curl on Unix)
     uv_exe = install_uv_with_official_script(cache_dir)
-    if uv_exe:
+    if uv_exe and _validate_uv(uv_exe):
         log.info("uv installed at %s", uv_exe)
         return uv_exe
 
