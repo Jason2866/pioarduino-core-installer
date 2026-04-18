@@ -231,33 +231,53 @@ def install_uv_download(cache_dir):
         return None
 
 
+def _validate_uv(uv_path):
+    """Check that a uv binary is actually executable by running --version."""
+    try:
+        subprocess.run(
+            [uv_path, "--version"],
+            check=True,
+            timeout=10,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        )
+        return True
+    except (subprocess.CalledProcessError, subprocess.TimeoutExpired, OSError) as e:
+        log.debug("uv at %s is not usable: %s", uv_path, e)
+        return False
+
+
 def get_uv_executable():
     """Get path to uv executable, install if needed."""
     # First try to find uv in PATH
     uv_exe = shutil.which("uv")
     if uv_exe and os.path.isfile(uv_exe):
-        log.debug("Found uv in PATH: %s", uv_exe)
-        return uv_exe
+        if _validate_uv(uv_exe):
+            log.debug("Found uv in PATH: %s", uv_exe)
+            return uv_exe
+        log.debug("uv found in PATH at %s but not usable, skipping", uv_exe)
 
-    # Try to find cached uv
+    # Try to find cached uv in ~/.platformio/.cache/
     cache_dir = core.get_cache_dir()
     cached_uv = os.path.join(cache_dir, UV_EXE)
 
     if os.path.isfile(cached_uv) and (util.IS_WINDOWS or os.access(cached_uv, os.X_OK)):
-        log.debug("Found cached uv: %s", cached_uv)
-        return cached_uv
+        if _validate_uv(cached_uv):
+            log.debug("Found cached uv: %s", cached_uv)
+            return cached_uv
+        log.debug("Cached uv at %s not usable, reinstalling", cached_uv)
 
-    # Install uv using official script (requires curl on Unix)
-    uv_exe = install_uv_with_official_script(cache_dir)
-    if uv_exe:
-        log.info("uv installed at %s", uv_exe)
-        return uv_exe
-
-    # Fallback: download uv binary directly using Python (no curl needed)
-    log.debug("Falling back to direct Python download of uv")
+    # Primary: download uv binary directly using Python/requests into cache_dir
+    # This gives full control over the install path (no ~/.local/bin/ issues)
     uv_exe = install_uv_download(cache_dir)
     if uv_exe:
         log.info("uv downloaded at %s", uv_exe)
+        return uv_exe
+
+    # Fallback: official installer script (requires curl on Unix)
+    uv_exe = install_uv_with_official_script(cache_dir)
+    if uv_exe:
+        log.info("uv installed at %s", uv_exe)
         return uv_exe
 
     return None
