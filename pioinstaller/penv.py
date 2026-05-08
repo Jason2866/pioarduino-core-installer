@@ -402,6 +402,44 @@ def install_uv_in_venv_with_system_uv(system_uv_exe, penv_dir):
         raise exception.PIOInstallerException("Timeout installing uv in penv") from e
 
 
+def install_pip_in_venv_with_penv_uv(penv_dir):
+    """
+    Use the penv's own uv to install pip into the penv.
+    Required for backwards compatibility with old PlatformIO versions.
+    """
+    penv_uv = os.path.join(get_penv_bin_dir(penv_dir), UV_EXE)
+    venv_python = os.path.join(get_penv_bin_dir(penv_dir), PYTHON_EXE)
+    cmd = [penv_uv, "pip", "install", "--python", venv_python, "pip"]
+
+    try:
+        result = subprocess.run(
+            cmd,
+            check=True,
+            timeout=300,  # 5 minutes timeout
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+        )
+        log.debug("Successfully installed pip in venv via penv uv: %s", result.stdout)
+    except subprocess.CalledProcessError as e:
+        log.debug(
+            "Failed to install pip in venv via penv uv: %s\nOutput: %s", e, e.stdout
+        )
+        raise exception.PIOInstallerException(
+            "Could not install pip in penv via penv uv: %s" % (e.stdout or e)
+        ) from e
+    except subprocess.TimeoutExpired as e:
+        log.debug("Timeout installing pip in venv via penv uv: %s", e)
+        raise exception.PIOInstallerException(
+            "Timeout installing pip in penv via penv uv"
+        ) from e
+    except OSError as e:
+        log.debug("OS error installing pip in venv via penv uv: %s", e)
+        raise exception.PIOInstallerException(
+            "Could not execute penv uv to install pip: %s" % e
+        ) from e
+
+
 def init_state(python_exe, penv_dir):
     """Initialize virtual environment state."""
     version_code = (
