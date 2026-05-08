@@ -119,6 +119,14 @@ def _install_platformio_core(shutdown_piohome=True, develop=False):
         penv.install_uv_in_venv_with_system_uv(uv_exe, penv_dir)
     except exception.PIOInstallerException as exc:
         log.warning("Could not install uv into penv (non-fatal): %s", exc)
+    else:
+        # Install pip via penv uv for backwards compatibility with old PlatformIO
+        try:
+            penv.install_pip_in_venv_with_penv_uv(penv_dir)
+        except exception.PIOInstallerException as exc:
+            log.warning(
+                "Could not install pip into penv via penv uv (non-fatal): %s", exc
+            )
 
     _post_install_message(penv_dir)
     return True

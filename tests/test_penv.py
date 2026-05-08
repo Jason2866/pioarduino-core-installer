@@ -74,6 +74,8 @@ def prepared_penv(tmp_path_factory):
     assert result_dir == penv_dir
     # Install uv in the penv like the full install flow does
     penv.install_uv_in_venv_with_system_uv(uv_exe, penv_dir)
+    # Install pip via penv uv for backwards compatibility
+    penv.install_pip_in_venv_with_penv_uv(penv_dir)
     return penv_dir
 
 
@@ -99,6 +101,19 @@ def test_install_uv_download(tmpdir):
     )
     assert result.returncode == 0
     assert "uv" in result.stdout.lower()
+
+
+def test_pip_installed_in_penv(prepared_penv):
+    """Test that pip is installed and functional in the penv."""
+    penv_dir = prepared_penv
+    bin_dir = penv.get_penv_bin_dir(penv_dir)
+    pip_exe = os.path.join(bin_dir, "pip.exe" if util.IS_WINDOWS else "pip")
+    assert os.path.isfile(pip_exe), f"pip executable not found at {pip_exe}"
+    result = subprocess.run(
+        [pip_exe, "--version"], capture_output=True, text=True, check=True, timeout=10
+    )
+    assert result.returncode == 0
+    assert "pip" in result.stdout.lower()
 
 
 def test_uv_help_in_existing_penv(prepared_penv):
