@@ -433,6 +433,11 @@ def install_pip_in_venv_with_penv_uv(penv_dir):
         raise exception.PIOInstallerException(
             "Timeout installing pip in penv via penv uv"
         ) from e
+    except OSError as e:
+        log.debug("OS error installing pip in venv via penv uv: %s", e)
+        raise exception.PIOInstallerException(
+            "Could not execute penv uv to install pip: %s" % e
+        ) from e
 
 
 def init_state(python_exe, penv_dir):
